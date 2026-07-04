@@ -158,7 +158,6 @@ const API = {
     async getBookMeta(id) { return (await fetch(`/api/books/${encodeURIComponent(id)}`)).json(); },
     async getBookContent(id) { return (await fetch(`/api/books/${encodeURIComponent(id)}/content`)).text(); },
     async createBook(d) { return (await fetch('/api/books', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) })).json(); },
-    // 修改：只传 progressGidx 和 title
     async updateProgress(id, d) { return (await fetch(`/api/books/${encodeURIComponent(id)}/progress`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d), keepalive: true })).json(); },
     async deleteBook(id) { return (await fetch(`/api/books/${encodeURIComponent(id)}`, { method:'DELETE' })).json(); }
 };
@@ -193,7 +192,7 @@ const LocalCache = {
             tx.oncomplete = () => resolve();
         });
     },
-    async updateProgress(id, progressGidx) { // 修改：移除 scrollTop
+    async updateProgress(id, progressGidx) {
         const data = await this.get(id);
         if (data) { data.lastProgressGidx = progressGidx; await this.set(id, data); }
     },
@@ -351,7 +350,6 @@ function cleanUpDOM() {
     }
 }
 
-// 核心修改：统一渲染与定位逻辑
 function teleportTo(centerIdx) {
     const newStart = Math.max(0, centerIdx - BUFFER_SIZE); 
     const newEnd = Math.min(DataManager.totalParagraphs - 1, centerIdx + BUFFER_SIZE);
@@ -368,26 +366,38 @@ function teleportTo(centerIdx) {
     windowStart = newStart; windowEnd = newEnd; 
     setupVirtualScroll();
     
-    // 核心修改：在 DOM 插入后，等待浏览器布局完成，然后直接滚动到目标索引的段落
-    // 无论是打开书籍恢复进度，还是点击目录跳转，逻辑完全一致
     setTimeout(() => {
         const targetNode = contentWrapper.querySelector(`[data-gidx="${centerIdx}"]`);
         if (targetNode) {
-            // 强制浏览器计算该节点的位置，确保后续滚动准确
             void targetNode.offsetHeight; 
             targetNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, 50);
 }
 
+// ================= 6. 滚动监听与位置计算 (已优化) =================
+function calculateCurrentProgress() {
+    const scrollTop = readerEl.scrollTop; 
+    const domNodes = contentWrapper.children; 
+    let topGidx = windowStart;
+    for (let i = 0; i < domNodes.length; i++) { 
+        if (domNodes[i].offsetTop <= scrollTop + 100) topGidx = parseInt(domNodes[i].dataset.gidx); 
+        else break; 
+    }
+    return topGidx;
+}
+
 let scrollTimer;
 readerEl.addEventListener('scroll', () => {
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => {
-        const scrollTop = readerEl.scrollTop; const domNodes = contentWrapper.children; let topGidx = windowStart;
-        for (let i = 0; i < domNodes.length; i++) { if (domNodes[i].offsetTop <= scrollTop + 100) topGidx = parseInt(domNodes[i].dataset.gidx); else break; }
+        const topGidx = calculateCurrentProgress();
         const currentChapter = DataManager.getChapterByGlobalIdx(topGidx);
-        if (currentChapter.chapterIdx !== currentChapterIdx) { currentChapterIdx = currentChapter.chapterIdx; updateHeader(currentChapterIdx); }
+        
+        if (currentChapter.chapterIdx !== currentChapterIdx) { 
+            currentChapterIdx = currentChapter.chapterIdx; 
+            updateHeader(currentChapterIdx); 
+        }
         currentGlobalIdx = topGidx;
         saveProgress();
     }, 60);
@@ -399,7 +409,6 @@ function updateHeader(cIdx) {
     document.querySelectorAll('#toc-list .item').forEach((el, i) => el.classList.toggle('active', i === cIdx));
 }
 
-// 核心修改：目录跳转逻辑大幅简化，直接调用 teleportTo
 async function jumpToChapter(cIdx) {
     const ch = DataManager.chMap.find(c => c.chapterIdx === cIdx); 
     if (!ch) return;
@@ -407,7 +416,6 @@ async function jumpToChapter(cIdx) {
     closeDrawers(); 
     document.body.classList.remove('ui-visible');
     
-    // 直接定位到章节标题所在的全局索引
     teleportTo(ch.globalIdx);
 }
 
@@ -470,12 +478,20 @@ document.getElementById('font-inc').onclick = () => { if(settings.fontSize < 28)
 document.querySelectorAll('[data-line]').forEach(btn => { btn.onclick = () => { settings.lineHeight = parseFloat(btn.dataset.line); applySettings(); }; });
 document.querySelectorAll('.theme-dot').forEach(dot => { dot.onclick = () => { settings.theme = dot.dataset.t; applySettings(); }; });
 
-// 核心修改：saveProgress 不再保存 scrollTop
+// ================= 8. 进度保存 (已增强：强制保存逻辑) =================
 let saveTimer;
 function saveProgress(force = false) {
     clearTimeout(saveTimer);
+    
     const doSave = () => {
         if (currentBookId) {
+            // 【核心修复】：如果是强制保存（比如点返回），立即刷新位置，不等定时器
+            if (force) {
+                currentGlobalIdx = calculateCurrentProgress();
+                const ch = DataManager.getChapterByGlobalIdx(currentGlobalIdx);
+                if (ch) currentChapterIdx = ch.chapterIdx;
+            }
+
             const currentChapter = DataManager.chMap.find(c => c.chapterIdx === currentChapterIdx);
             const chapterTitle = currentChapter ? currentChapter.title : '';
             
@@ -483,10 +499,16 @@ function saveProgress(force = false) {
                 progressGidx: currentGlobalIdx,
                 currentChapterTitle: chapterTitle 
             }).catch(()=>{});
+            
             LocalCache.updateProgress(currentBookId, currentGlobalIdx);
         }
     };
-    if (force) doSave(); else saveTimer = setTimeout(doSave, 500);
+    
+    if (force) {
+        doSave(); // 强制立即执行
+    } else {
+        saveTimer = setTimeout(doSave, 500); // 平时滚动才延迟 500ms 执行
+    }
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveProgress(true); });
 window.addEventListener('beforeunload', () => { saveProgress(true); });
@@ -552,7 +574,6 @@ window.refreshBook = async function(id) {
     finally { loadingMask.classList.add('hidden'); }
 };
 
-// 核心修改：openBook 逻辑简化，直接使用 teleportTo
 window.openBook = async function(id) {
     currentBookId = id;
     loadingMask.classList.remove('hidden'); loadingText.textContent = '正在加载书籍...';
@@ -563,12 +584,10 @@ window.openBook = async function(id) {
         contentWrapper.innerHTML = ''; windowStart = 0; windowEnd = 0;
         renderTocList();
         
-        // 边界保护
         currentGlobalIdx = Math.min(meta.progress_gidx || 0, DataManager.totalParagraphs - 1);
         currentChapterIdx = DataManager.getChapterByGlobalIdx(currentGlobalIdx).chapterIdx;
         
         applySettings();
-        // 直接使用 teleportTo 跳转到当前段落
         teleportTo(currentGlobalIdx);
         updateHeader(currentChapterIdx);
         

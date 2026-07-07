@@ -127,38 +127,107 @@ body{
   font-family:inherit;cursor:pointer;margin-top:8px;
 }
 
-#editorView{background:var(--bg);z-index:2}
+/* ========== 编辑页布局重构 ========== */
+#editorView{
+  background:var(--bg);
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
 
+.editor-header{
+  flex:0 0 auto;
+  background:var(--surface);
+  padding:calc(12px + var(--safe-top)) 16px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--border);
+  box-shadow:var(--shadow);
+  z-index:10;
+}
+.editor-header h2{font-size:17px;font-weight:600;color:var(--fg)}
+
+/* 优化按钮设计 */
+.header-btn{
+  padding:10px 20px;
+  border:none;
+  border-radius:12px;
+  font-family:inherit;
+  font-size:15px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.15s;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.header-btn.back{
+  background:var(--surface-2);
+  color:var(--fg-2);
+}
+.header-btn.back:active{
+  background:var(--surface-3);
+  transform:scale(0.95);
+}
+.header-btn.save{
+  background:var(--accent);
+  color:#fff;
+  box-shadow:0 2px 8px rgba(13,148,136,0.3);
+}
+.header-btn.save:active{
+  background:var(--accent-dark);
+  transform:scale(0.95);
+}
+.header-btn.save:disabled{
+  opacity:0.5;
+  box-shadow:none;
+}
+
+/* 预览区域 */
 .preview-area{
   flex:0 0 auto;
-  max-height:45vh;
+  max-height:50vh;
   overflow:hidden;
-  padding:12px;
+  padding:16px;
   display:flex;
   align-items:center;
   justify-content:center;
   background:var(--surface-3);
+  border-bottom:1px solid var(--border);
 }
 .preview-frame{
-  max-height:100%;
+  width:100%;
+  max-width:400px;
   display:flex;
   align-items:center;
+  justify-content:center;
 }
 .preview-frame canvas{
-  max-height:100%;
+  max-width:100%;
+  max-height:40vh;
   width:auto;
+  height:auto;
+  object-fit:contain;
   box-shadow:var(--shadow-md);
   border-radius:8px;
+  background:#fff;
 }
 
+/* 编辑表单区域 */
 .edit-sheet{
   flex:1;
   min-height:0;
   overflow-y:auto;
-  max-height:none;
+  -webkit-overflow-scrolling:touch;
+  background:var(--surface);
   border-radius:16px 16px 0 0;
   box-shadow:0 -4px 20px rgba(0,0,0,0.08);
   padding:16px 16px calc(20px + var(--safe-bottom));
+  margin-top:-16px;
+  position:relative;
+  z-index:5;
 }
 .sheet-handle{width:36px;height:4px;background:var(--border-hi);border-radius:2px;margin:0 auto 16px;}
 .sheet-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
@@ -286,7 +355,10 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 
 <div class="view" id="editorView">
   <div class="editor-header">
-    <button class="header-btn back" id="editorBackBtn">返回</button>
+    <button class="header-btn back" id="editorBackBtn">
+      <svg class="icon-sm" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      返回
+    </button>
     <h2>预览与编辑</h2>
     <button class="header-btn save" id="editorSaveBtn">保存</button>
   </div>
@@ -368,9 +440,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
 
 <script>
-// ================= 配置区 =================
 const AMAP_KEY = 'aa30998599ef699354a51a1236aa6946'; 
-// ==========================================
 
 const state = {
   stream: null,
@@ -734,7 +804,6 @@ function switchView(viewId){
   }
 }
 
-// 极简几何图标绘制辅助函数
 function drawIconDot(ctx, x, y, size, color) {
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -771,15 +840,12 @@ function drawResult(){
   const topBorder = sideBorder;
   const padding = sideBorder * 0.8;
 
-  // 动态计算字体大小 (Slate 色系)
   const baseFont = Math.max(W * 0.024, 14);
-  const timeFont = baseFont * 1.8; // 时间最大
-  const infoFont = baseFont * 1.2; // 地点次之
-  const smallFont = baseFont * 0.9; // 其他最小
+  const timeFont = baseFont * 1.8;
+  const infoFont = baseFont * 1.2;
+  const smallFont = baseFont * 0.9;
   const iconSize = baseFont * 0.8;
 
-  // 计算文字区域需要的最小高度 (上下分层布局)
-  // 时间行 + 地点行 + 类型行 + 分割线间距 + 底部元数据行 + 上下padding
   const lineHeight = 1.6;
   const textHeight = padding * 2 + (timeFont * lineHeight) + (infoFont * lineHeight) + (smallFont * lineHeight) + (smallFont * lineHeight) + 20;
   
@@ -788,11 +854,8 @@ function drawResult(){
   canvas.width = W + sideBorder * 2;
   canvas.height = H + topBorder + bottomBorder;
 
-  // 绘制白色背景
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // 绘制图片
   ctx.drawImage(img, sideBorder, topBorder, W, H);
 
   drawWatermarkText(ctx, canvas.width, canvas.height, W, H, sideBorder, topBorder, bottomBorder, timeFont, infoFont, smallFont, iconSize, padding);
@@ -815,14 +878,12 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   const lineHeight = 1.6;
   let currentY = textAreaY + padding;
 
-  // 配色方案 (Slate 深蓝灰系)
-  const colorPrimary = '#2563EB'; // 皇家蓝 (图标/强调)
-  const colorText1 = '#0F172A';   // 极深蓝灰 (时间)
-  const colorText2 = '#334155';   // 深石板蓝 (地点)
-  const colorText3 = '#64748B';   // 冷灰蓝 (类型/坐标/设备)
-  const colorLine = '#E2E8F0';    // 极淡蓝灰 (分割线)
+  const colorPrimary = '#2563EB';
+  const colorText1 = '#0F172A';
+  const colorText2 = '#334155';
+  const colorText3 = '#64748B';
+  const colorLine = '#E2E8F0';
 
-  // 1. 绘制时间 (第一层)
   drawIconDot(ctx, leftX, currentY + (timeFont - iconSize)/2, iconSize, colorPrimary);
   ctx.fillStyle = colorText1;
   ctx.font = `700 ${timeFont}px 'JetBrains Mono', monospace`;
@@ -831,7 +892,6 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   ctx.fillText(time, leftX + iconSize + padding * 0.5, currentY);
   currentY += timeFont * lineHeight;
 
-  // 2. 绘制地点 (第二层)
   drawIconSquare(ctx, leftX, currentY + (infoFont - iconSize)/2, iconSize, colorPrimary);
   ctx.fillStyle = colorText2;
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
@@ -839,16 +899,14 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   ctx.fillText(locText, leftX + iconSize + padding * 0.5, currentY);
   currentY += infoFont * lineHeight;
 
-  // 3. 绘制类型与备注 (第三层)
   drawIconTag(ctx, leftX, currentY + (smallFont - iconSize)/2, iconSize, colorPrimary);
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   let typeText = type + (note ? ` · ${note}` : '');
   typeText = truncateText(ctx, typeText, maxTextWidth);
   ctx.fillText(typeText, leftX + iconSize + padding * 0.5, currentY);
-  currentY += smallFont * lineHeight + 10; // 增加一点间距给分割线
+  currentY += smallFont * lineHeight + 10;
 
-  // 4. 绘制分割线
   ctx.strokeStyle = colorLine;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -857,17 +915,14 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   ctx.stroke();
   currentY += 15;
 
-  // 5. 绘制底部元数据 (设备 + 坐标) - 左右分布
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   ctx.textBaseline = 'top';
   
-  // 左侧：设备
   ctx.textAlign = 'left';
   let devText = truncateText(ctx, device, (rightX - leftX) / 2 - iconSize - padding * 0.5);
   ctx.fillText(devText, leftX, currentY);
 
-  // 右侧：坐标
   ctx.textAlign = 'right';
   let coordText = '';
   if(lat && lng) coordText = `${formatCoord(lat, 'N')} ${formatCoord(lng, 'E')}`;
@@ -942,7 +997,9 @@ function showToast(msg, type){
 
 window.addEventListener('load', init);
 document.addEventListener('touchmove', e => {
-  if(e.target.closest('.edit-sheet') || e.target.closest('.preview-area') || e.target.closest('.save-overlay')) return;
+  if(e.target.closest('.edit-sheet')) return;
+  if(e.target.closest('.preview-area')) return;
+  if(e.target.closest('.save-overlay')) return;
   e.preventDefault();
 }, { passive: false });
 </script>

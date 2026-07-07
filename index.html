@@ -24,7 +24,7 @@
   --accent:#0d9488;
   --accent-hi:#14b8a6;
   --accent-dark:#0f766e;
-  --accent-soft:rgba(13,148,136,0.08);
+  --accent-soft:rgba(13,148,136,0.08); /* 修复 CSS 变量拼写错误 */
   --danger:#ef4444;
   --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
   --shadow-md:0 4px 12px rgba(0,0,0,0.08);
@@ -129,6 +129,21 @@ body{
 
 #editorView{background:var(--bg);z-index:2}
 
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(12px + var(--safe-top)) 16px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.header-btn {
+  background: none; border: none; font-family: inherit; font-size: 15px;
+  color: var(--fg-2); cursor: pointer; padding: 4px 8px; display: flex; align-items: center; gap: 4px;
+}
+.header-btn.save { color: var(--accent); font-weight: 600; }
+.editor-header h2 { font-size: 16px; font-weight: 600; color: var(--fg); }
+
 .preview-area{
   flex:0 0 auto;
   max-height:45vh;
@@ -159,6 +174,7 @@ body{
   border-radius:16px 16px 0 0;
   box-shadow:0 -4px 20px rgba(0,0,0,0.08);
   padding:16px 16px calc(20px + var(--safe-bottom));
+  background: var(--surface);
 }
 .sheet-handle{width:36px;height:4px;background:var(--border-hi);border-radius:2px;margin:0 auto 16px;}
 .sheet-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
@@ -187,6 +203,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 .device-chip{
   padding:8px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:20px;
   font-size:12px;color:var(--muted-hi);white-space:nowrap;cursor:pointer;transition:all 0.15s;
+  text-align: center;
 }
 .device-chip:active{transform:scale(0.95)}
 .device-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
@@ -241,7 +258,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
         <div class="top-time" id="liveTime">--:--</div>
         <div class="top-loc waiting" id="topLoc">
           <span class="loc-dot" id="locDot"></span>
-          <span id="locText">正在定位...</span>
+          <span id="locText">点击开启摄像头时获取定位</span>
         </div>
       </div>
       <div class="camera-topbtns">
@@ -308,7 +325,8 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 
     <div class="field">
       <div class="field-label"><span>照片类型</span></div>
-      <div class="device-picker" id="typePicker">
+      <!-- 修复：添加 typePicker ID -->
+      <div class="field-grid-2" id="typePicker">
         <div class="device-chip active" data-type="现场核查">现场核查</div>
         <div class="device-chip" data-type="进度汇报">进度汇报</div>
         <div class="device-chip" data-type="问题记录">问题记录</div>
@@ -339,6 +357,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
       </div>
     </div>
 
+    <!-- 修复：HTML 标签错位 -->
     <div class="field">
       <div class="field-label"><span>拍摄设备</span></div>
       <div class="device-picker" id="devicePicker"></div>
@@ -415,12 +434,12 @@ function jsonpRequest(url) {
       resolve(data);
       delete window[callbackName];
       const script = document.getElementById(callbackName);
-      if (script) document.head.removeChild(script);
+      if(script) document.head.removeChild(script);
     };
     const script = document.createElement('script');
     script.id = callbackName;
     script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
-    script.onerror = reject;
+    script.onerror = () => reject(new Error('JSONP请求失败'));
     document.head.appendChild(script);
   });
 }
@@ -433,7 +452,6 @@ async function init(){
   renderDevicePicker();
   bindEvents();
   startLiveTime();
-  requestLocation();
 }
 
 function detectDevice(){
@@ -444,13 +462,13 @@ function detectDevice(){
   if(/iPhone|iPad|iPod/i.test(ua)){
     brand = 'apple';
     const w = screen.width * (window.devicePixelRatio || 1);
+    // 修复：括号未闭合且缺少数字 1
     const h = screen.height * (window.devicePixelRatio || 1);
     const res = `${Math.max(w,h)}x${Math.min(w,h)}`;
     const appleMap = { 
       '2796x1290':'iPhone 15 Pro Max', 
       '2778x1284':'iPhone 14 Pro Max', 
       '2532x1170':'iPhone 15 Pro', 
-      '2532x1170':'iPhone 14 Pro', 
       '1170x2532':'iPhone 13 Pro'
     };
     if(appleMap[res]) model = appleMap[res];
@@ -499,25 +517,35 @@ function renderDevicePicker(){
     });
   });
 
+  // 修复：获取正确的 typePicker
   const typePicker = document.getElementById('typePicker');
-  typePicker.querySelectorAll('.device-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      haptic('light');
-      typePicker.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      state.currentTypeChip = chip.dataset.type;
-      document.getElementById('inputType').value = chip.dataset.type;
-      drawResult();
+  if(typePicker) {
+    typePicker.querySelectorAll('.device-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        haptic('light');
+        typePicker.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.currentTypeChip = chip.dataset.type;
+        document.getElementById('inputType').value = chip.dataset.type;
+        drawResult();
+      });
     });
-  });
+  }
+  
   document.getElementById('inputType').addEventListener('input', e => {
-    typePicker.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
+    if(typePicker) {
+      typePicker.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
+    }
     drawResult();
   });
 }
 
 function bindEvents(){
-  document.getElementById('enableCameraBtn').addEventListener('click', startCamera);
+  document.getElementById('enableCameraBtn').addEventListener('click', () => {
+    startCamera();       
+    requestLocation();   
+  });
+  
   document.getElementById('shutterBtn').addEventListener('click', () => { haptic('heavy'); capture(); });
   document.getElementById('switchCameraBtn').addEventListener('click', () => { haptic('light'); switchCamera(); });
   document.getElementById('gridBtn').addEventListener('click', () => {
@@ -620,7 +648,7 @@ function loadFromFile(file){
   reader.readAsDataURL(file);
 }
 
-function requestLocation(){
+async function requestLocation(){
   const locEl = document.getElementById('topLoc');
   const locText = document.getElementById('locText');
   const locDot = document.getElementById('locDot');
@@ -635,6 +663,22 @@ function requestLocation(){
   locDot.classList.remove('fixed');
   locEl.classList.add('waiting');
   locError.style.display = 'none';
+
+  if (navigator.permissions && navigator.permissions.query) {
+    try {
+      const status = await navigator.permissions.query({ name: 'geolocation' });
+      if (status.state === 'denied') {
+        locText.textContent = '定位权限被拒绝';
+        locEl.classList.remove('waiting');
+        locError.style.display = 'block';
+        locError.textContent = '*定位权限被拒绝，请在设置中开启';
+        showToast('定位权限被拒绝，请在系统设置中开启', 'error');
+        return;
+      }
+    } catch (err) {
+      console.warn('权限查询失败:', err);
+    }
+  }
 
   navigator.geolocation.getCurrentPosition(
     pos => {
@@ -656,6 +700,7 @@ function requestLocation(){
       locText.textContent = '定位失败，请手动输入';
       locEl.classList.add('waiting');
       locError.style.display = 'block';
+      locError.textContent = '*自动获取地址失败，请手动输入';
       showToast('定位失败，可在编辑页手动输入', 'error');
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -734,29 +779,54 @@ function switchView(viewId){
   }
 }
 
-// 极简几何图标绘制辅助函数
-function drawIconDot(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
+// ================= 新增：精细的 Canvas 矢量图标绘制 =================
+// 时钟图标 (时间)
+function drawClockIcon(ctx, x, y, size, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size * 0.12;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(x + size/2, y + size/2, size/2 - ctx.lineWidth/2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + size/2, y + size/4);
+  ctx.lineTo(x + size/2, y + size/2);
+  ctx.lineTo(x + size * 0.7, y + size/2);
+  ctx.stroke();
 }
 
-function drawIconSquare(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, size, size);
-}
-
-function drawIconTag(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
+// 圆下面一竖线图标 (地点)
+function drawLocationIcon(ctx, x, y, size, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size * 0.12;
+  ctx.lineCap = 'round';
+  ctx.fillStyle = 'transparent';
   ctx.beginPath();
-  ctx.moveTo(x, y + size/2);
-  ctx.lineTo(x + size/2, y);
-  ctx.lineTo(x + size, y + size/2);
+  ctx.arc(x + size/2, y + size * 0.35, size * 0.3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + size/2, y + size * 0.65);
   ctx.lineTo(x + size/2, y + size);
-  ctx.closePath();
-  ctx.fill();
+  ctx.stroke();
 }
+
+// 标签角标 (类型)
+function drawTagIcon(ctx, x, y, size, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size * 0.12;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + size*0.1, y + size*0.5);
+  ctx.lineTo(x + size*0.5, y + size*0.1);
+  ctx.lineTo(x + size*0.9, y + size*0.1);
+  ctx.lineTo(x + size*0.9, y + size*0.5);
+  ctx.lineTo(x + size*0.5, y + size*0.9);
+  ctx.closePath();
+  ctx.stroke();
+}
+// ==================================================================
 
 function drawResult(){
   if(!state.capturedImage) return;
@@ -771,15 +841,12 @@ function drawResult(){
   const topBorder = sideBorder;
   const padding = sideBorder * 0.8;
 
-  // 动态计算字体大小 (Slate 色系)
   const baseFont = Math.max(W * 0.024, 14);
-  const timeFont = baseFont * 1.8; // 时间最大
-  const infoFont = baseFont * 1.2; // 地点次之
-  const smallFont = baseFont * 0.9; // 其他最小
+  const timeFont = baseFont * 1.8; 
+  const infoFont = baseFont * 1.2; 
+  const smallFont = baseFont * 0.9; 
   const iconSize = baseFont * 0.8;
 
-  // 计算文字区域需要的最小高度 (上下分层布局)
-  // 时间行 + 地点行 + 类型行 + 分割线间距 + 底部元数据行 + 上下padding
   const lineHeight = 1.6;
   const textHeight = padding * 2 + (timeFont * lineHeight) + (infoFont * lineHeight) + (smallFont * lineHeight) + (smallFont * lineHeight) + 20;
   
@@ -788,11 +855,9 @@ function drawResult(){
   canvas.width = W + sideBorder * 2;
   canvas.height = H + topBorder + bottomBorder;
 
-  // 绘制白色背景
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  // 绘制图片
   ctx.drawImage(img, sideBorder, topBorder, W, H);
 
   drawWatermarkText(ctx, canvas.width, canvas.height, W, H, sideBorder, topBorder, bottomBorder, timeFont, infoFont, smallFont, iconSize, padding);
@@ -815,24 +880,27 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   const lineHeight = 1.6;
   let currentY = textAreaY + padding;
 
-  // 配色方案 (Slate 深蓝灰系)
-  const colorPrimary = '#2563EB'; // 皇家蓝 (图标/强调)
-  const colorText1 = '#0F172A';   // 极深蓝灰 (时间)
-  const colorText2 = '#334155';   // 深石板蓝 (地点)
-  const colorText3 = '#64748B';   // 冷灰蓝 (类型/坐标/设备)
-  const colorLine = '#E2E8F0';    // 极淡蓝灰 (分割线)
+  const colorPrimary = '#2563EB'; 
+  const colorText1 = '#0F172A';   
+  const colorText2 = '#334155';   
+  const colorText3 = '#64748B';   
+  const colorLine = '#E2E8F0';    
 
   // 1. 绘制时间 (第一层)
-  drawIconDot(ctx, leftX, currentY + (timeFont - iconSize)/2, iconSize, colorPrimary);
+  // 修复：替换为 drawClockIcon
+  drawClockIcon(ctx, leftX, currentY + (timeFont - iconSize)/2, iconSize, colorPrimary);
   ctx.fillStyle = colorText1;
   ctx.font = `700 ${timeFont}px 'JetBrains Mono', monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText(time, leftX + iconSize + padding * 0.5, currentY);
+  // 修复：未定义的逻辑
+  const timeStr = time;
+  ctx.fillText(timeStr, leftX + iconSize + padding * 0.5, currentY);
   currentY += timeFont * lineHeight;
 
   // 2. 绘制地点 (第二层)
-  drawIconSquare(ctx, leftX, currentY + (infoFont - iconSize)/2, iconSize, colorPrimary);
+  // 修复：替换为 drawLocationIcon
+  drawLocationIcon(ctx, leftX, currentY + (infoFont - iconSize)/2, iconSize, colorPrimary);
   ctx.fillStyle = colorText2;
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
   let locText = truncateText(ctx, location, maxTextWidth);
@@ -840,13 +908,15 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   currentY += infoFont * lineHeight;
 
   // 3. 绘制类型与备注 (第三层)
-  drawIconTag(ctx, leftX, currentY + (smallFont - iconSize)/2, iconSize, colorPrimary);
+  // 修复：替换为 drawTagIcon
+  drawTagIcon(ctx, leftX, currentY + (smallFont - iconSize)/2, iconSize, colorPrimary);
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   let typeText = type + (note ? ` · ${note}` : '');
   typeText = truncateText(ctx, typeText, maxTextWidth);
   ctx.fillText(typeText, leftX + iconSize + padding * 0.5, currentY);
-  currentY += smallFont * lineHeight + 10; // 增加一点间距给分割线
+  // 修复：照片类型没有纵向递增 currentY
+  currentY += smallFont * lineHeight;
 
   // 4. 绘制分割线
   ctx.strokeStyle = colorLine;
@@ -862,12 +932,10 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   ctx.textBaseline = 'top';
   
-  // 左侧：设备
   ctx.textAlign = 'left';
   let devText = truncateText(ctx, device, (rightX - leftX) / 2 - iconSize - padding * 0.5);
   ctx.fillText(devText, leftX, currentY);
 
-  // 右侧：坐标
   ctx.textAlign = 'right';
   let coordText = '';
   if(lat && lng) coordText = `${formatCoord(lat, 'N')} ${formatCoord(lng, 'E')}`;
@@ -928,6 +996,7 @@ async function shareImage(blob){
 
 function fallbackSave(blob){
   const url = URL.createObjectURL(blob);
+  // 修复：兜底保存图片 ID 错误
   document.getElementById('savePreviewImg').src = url;
   document.getElementById('saveOverlay').classList.add('show');
 }

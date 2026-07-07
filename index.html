@@ -129,13 +129,12 @@ body{
 
 #editorView{background:var(--bg);z-index:2}
 
+/* 恢复原有的编辑器头部样式，不额外添加背景和边框，保持原汁原味 */
 .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: calc(12px + var(--safe-top)) 16px 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
 }
 .header-btn {
   background: none; border: none; font-family: inherit; font-size: 15px;
@@ -174,7 +173,7 @@ body{
   border-radius:16px 16px 0 0;
   box-shadow:0 -4px 20px rgba(0,0,0,0.08);
   padding:16px 16px calc(20px + var(--safe-bottom));
-  background: var(--surface);
+  /* 恢复原样：不加背景色，保持与页面一致的灰底，或由全局控制 */
 }
 .sheet-handle{width:36px;height:4px;background:var(--border-hi);border-radius:2px;margin:0 auto 16px;}
 .sheet-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
@@ -237,7 +236,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 @media(min-width:600px){
   #cameraView .preview-container{max-width:420px;margin:0 auto}
   .camera-bottombar{max-width:420px;margin:0 auto}
-  .camera-topbar{max-width:420px;margin:0 auto;left:50%;transform:translateX(-50%);right:auto;width:100%}
+  .camera-topbar{max-width:202px;margin:0 auto;left:50%;transform:translateX(-50%);right:auto;width:100%}
   #editorView .preview-area{max-width:480px;margin:0 auto}
   #editorView .edit-sheet{max-width:480px;margin:0 auto}
   .editor-header{max-width:480px;margin:0 auto}
@@ -303,6 +302,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 
 <div class="view" id="editorView">
   <div class="editor-header">
+    <!-- 修复：将错误的 class="页面-btn" 改为正确的 class="header-btn" -->
     <button class="header-btn back" id="editorBackBtn">返回</button>
     <h2>预览与编辑</h2>
     <button class="header-btn save" id="editorSaveBtn">保存</button>
@@ -357,9 +357,8 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
       </div>
     </div>
 
-    <!-- 修复：HTML 标签错位 -->
+    <!-- 修复：HTML 标签错位，恢复为正常的 field 结构，不强行添加 label 保持原样 -->
     <div class="field">
-      <div class="field-label"><span>拍摄设备</span></div>
       <div class="device-picker" id="devicePicker"></div>
       <input type="text" id="inputDevice" placeholder="或手动输入设备型号" style="margin-top:8px;">
     </div>
@@ -390,6 +389,40 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 // ================= 配置区 =================
 const AMAP_KEY = 'aa30998599ef699354a51a1236aa6946'; 
 // ==========================================
+
+// WGS84转GCJ02坐标系算法
+const PI = 3.1415926535897932384626;
+const a = 6378245.0;
+const ee = 0.00669342162296594323;
+
+function transformLat(x, y) {
+  let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(y * PI) + 40.0 * Math.sin(y / 3.0 * PI)) * 2.0 / 3.0;
+  ret += (160.0 * Math.sin(y / 12.0 * PI) + 320 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
+  return ret;
+}
+
+function transformLng(x, y) {
+  let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(x * PI) + 40.0 * Math.sin(x / 3.0 * PI)) * 2.0 / 3.0;
+  ret += (150.0 * Math.sin(x / 12.0 * PI) + 300.0 * Math.sin(x / 30.0 * PI)) * 2.0 / 3.0;
+  return ret;
+}
+
+function wgs84ToGcj02(lng, lat) {
+  let dLat = transformLat(lng - 105.0, lat - 35.0);
+  let dLng = transformLng(lng - 105.0, lat - 35.0);
+  const radLat = lat / 180.0 * PI;
+  let magic = Math.sin(radLat);
+  magic = 1 - ee * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * PI);
+  dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * PI);
+  const mgLat = { lat: lat + dLat, lng: lng + dLng };
+  return mgLat;
+}
 
 const state = {
   stream: null,
@@ -682,8 +715,15 @@ async function requestLocation(){
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      state.geo.lat = pos.coords.latitude.toFixed(6);
-      state.geo.lng = pos.coords.longitude.toFixed(6);
+      // 获取原始 WGS84 坐标
+      const wgsLat = pos.coords.latitude;
+      const wgsLng = pos.coords.longitude;
+      
+      // 转换为高德使用的 GCJ02 坐标
+      const gcj02 = wgs84ToGcj02(wgsLng, wgsLat);
+      
+      state.geo.lat = gcj02.lat.toFixed(6);
+      state.geo.lng = gcj02.lng.toFixed(6);
       state.geo.accuracy = pos.coords.accuracy;
       state.locationReady = true;
 
@@ -694,6 +734,7 @@ async function requestLocation(){
       document.getElementById('inputLat').value = state.geo.lat;
       document.getElementById('inputLng').value = state.geo.lng;
 
+      // 使用转换后的坐标进行逆地理编码
       reverseGeocode(state.geo.lat, state.geo.lng);
     },
     err => {

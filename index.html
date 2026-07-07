@@ -127,7 +127,9 @@ body{
   font-family:inherit;cursor:pointer;margin-top:8px;
 }
 
-#editorView{display:flex;flex-direction:column}
+/* 修复 CSS 优先级 Bug：移除 #editorView 的 display:flex，让它受 .view 控制 */
+#editorView{background:var(--bg);z-index:2}
+
 .preview-area{
   flex:0 0 auto;
   max-height:45vh;
@@ -367,6 +369,11 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
 
 <script>
+// ================= 配置区 =================
+// 已填入你提供的高德 Web服务 Key
+const AMAP_KEY = 'aa30998599ef699354a51a1236aa6946'; 
+// ==========================================
+
 const state = {
   stream: null,
   facingMode: 'environment',
@@ -395,13 +402,38 @@ function debounce(func, wait) {
   };
 }
 
+// 修复 Bug：将 debouncedDrawResult 提前定义，防止 TDZ 报错
+const debouncedDrawResult = debounce(drawResult, 300);
+
 function haptic(style = 'light') {
   if (navigator.vibrate) {
     navigator.vibrate(style === 'heavy' ? 20 : 10);
   }
 }
 
-function init(){
+// 1. 内置 JSONP 请求函数 (解决本地 HTML 跨域报错的核心)
+function jsonpRequest(url) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'amap_jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    window[callbackName] = function(data) {
+      resolve(data);
+      delete window[callbackName];
+      const script = document.getElementById(callbackName);
+      if (script) document.head.removeChild(script);
+    };
+    const script = document.createElement('script');
+    script.id = callbackName;
+    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function init(){
+  // 优化：等待 Google 字体加载完成，防止 Canvas 绘制时字体 fallback 导致排版错乱
+  if (document.fonts) {
+    await document.fonts.ready;
+  }
   detectDevice();
   renderDevicePicker();
   bindEvents();
@@ -635,30 +667,43 @@ function requestLocation(){
   );
 }
 
+// 2. 替换后的高德逆地理编码函数 (使用 JSONP 绕过跨域)
 async function reverseGeocode(lat, lng){
+  const locText = document.getElementById('locText');
+  const locEl = document.getElementById('topLoc');
+  const inputLoc = document.getElementById('inputLocation');
+  const locError = document.getElementById('locError');
+
   try {
-    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=zh`);
-    const data = await res.json();
-    if(data){
-      const parts = [
-        data.principalSubdivision,
-        data.city,
-        data.locality,
-        data.thoroughfare,
-        data.subThoroughfare,
-        data.premise
-      ].filter(Boolean);
-      
-      const address = parts.join('·') || '未知地点';
-      state.geo.address = address;
-      document.getElementById('inputLocation').value = address;
-      document.getElementById('topLoc').classList.remove('waiting');
-      document.getElementById('locText').textContent = address;
+    // 注意：高德 location 参数顺序是 经度,纬度 (lng,lat)
+    const url = `https://restapi.amap.com/v3/geocode/regeo?output=JSON&location=${lng},${lat}&key=${AMAP_KEY}&radius=1000&extensions=all`;
+    const data = await jsonpRequest(url);
+
+    if(data.status === '1' && data.regeocode) {
+      const regeocode = data.regeocode;
+      let baseAddress = regeocode.formatted_address || '未知地点';
+      let poiName = '';
+      if(regeocode.pois && regeocode.pois.length > 0) {
+        poiName = regeocode.pois[0].name; 
+      }
+      let finalAddress = baseAddress;
+      if(poiName && !baseAddress.includes(poiName)) {
+         finalAddress = `${baseAddress} (${poiName})`; 
+      }
+      state.geo.address = finalAddress;
+      inputLoc.value = finalAddress;
+      locEl.classList.remove('waiting');
+      locText.textContent = finalAddress;
+      locError.style.display = 'none';
       if(state.capturedImage) drawResult();
+    } else {
+      throw new Error(data.info || '高德解析失败');
     }
   } catch(err) { 
-    console.warn('逆地理编码失败', err);
-    document.getElementById('locError').style.display = 'block';
+    console.error('逆地理编码失败:', err); 
+    locError.style.display = 'block';
+    locText.textContent = '自动获取失败';
+    showToast('地址解析失败，请手动输入', 'error');
   }
 }
 
@@ -705,16 +750,21 @@ function drawResult(){
   const W = img.naturalWidth;
   const H = img.naturalHeight;
 
-  const ratio = W / H;
-  let bottomBorder;
-  if (ratio < 0.8) { // 竖图
-    bottomBorder = Math.max(H * 0.18, 120); 
-  } else { // 横图或方图
-    bottomBorder = Math.max(H * 0.25, 150);
-  }
-
   const sideBorder = Math.max(Math.min(W, H) * 0.03, 16); 
   const topBorder = sideBorder;
+  const padding = sideBorder * 0.8;
+
+  // 动态计算字体大小
+  const baseFont = Math.max(W * 0.024, 14);
+  const timeFont = baseFont * 1.6;
+  const infoFont = baseFont * 1.1;
+
+  // 修复 Bug：动态计算文字区域需要的最小高度，确保白边绝对能容纳文字
+  const textHeight = padding * 0.8 + timeFont * 1.4 + infoFont * 1.6 + infoFont * 1.2 + padding;
+  let bottomBorder = Math.max(H * 0.2, textHeight);
+  if (W / H < 0.8) { // 竖图
+      bottomBorder = Math.max(H * 0.15, textHeight);
+  }
 
   canvas.width = W + sideBorder * 2;
   canvas.height = H + topBorder + bottomBorder;
@@ -737,48 +787,44 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB) {
 
   const padding = sideB * 0.8;
   const textAreaY = topB + imgH;
-  const textAreaH = bottomB;
 
   const baseFont = Math.max(imgW * 0.024, 14);
   const timeFont = baseFont * 1.6;
   const infoFont = baseFont * 1.1;
   const smallFont = baseFont * 0.9;
-  const iconFont = baseFont * 1.2;
 
   const leftX = sideB + padding;
   const rightX = sideB + imgW - padding;
   const splitLineX = sideB + imgW * 0.62;
 
+  // 修复 Bug：移除所有 Emoji，改用纯文本标签，彻底解决 iOS Canvas 渲染崩溃问题
   // 1. 绘制时间 (左侧)
   ctx.fillStyle = '#111827';
   ctx.font = `700 ${timeFont}px 'JetBrains Mono', monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText('⏱', leftX, textAreaY + padding * 0.8); 
-  ctx.fillText(time, leftX + iconFont * 1.2, textAreaY + padding * 0.8);
+  ctx.fillText('[时间] ' + time, leftX, textAreaY + padding * 0.8);
 
   // 2. 绘制地址 (左侧)
   ctx.fillStyle = '#374151';
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
-  let maxLeftW = splitLineX - leftX - padding - iconFont * 1.2;
+  let maxLeftW = splitLineX - leftX - padding;
   let locText = truncateText(ctx, location, maxLeftW);
-  ctx.fillText('📍', leftX, textAreaY + padding * 0.8 + timeFont * 1.4);
-  ctx.fillText(locText, leftX + iconFont * 1.2, textAreaY + padding * 0.8 + timeFont * 1.4);
+  ctx.fillText('[地点] ' + locText, leftX, textAreaY + padding * 0.8 + timeFont * 1.4);
 
   // 3. 绘制类型/备注 (左侧)
   ctx.fillStyle = '#6b7280';
   ctx.font = `400 ${infoFont}px 'Noto Sans SC', sans-serif`;
   let typeText = type + (note ? ` · ${note}` : '');
   typeText = truncateText(ctx, typeText, maxLeftW);
-  ctx.fillText('📝', leftX, textAreaY + padding * 0.8 + timeFont * 1.4 + infoFont * 1.6);
-  ctx.fillText(typeText, leftX + iconFont * 1.2, textAreaY + padding * 0.8 + timeFont * 1.4 + infoFont * 1.6);
+  ctx.fillText('[类型] ' + typeText, leftX, textAreaY + padding * 0.8 + timeFont * 1.4 + infoFont * 1.6);
 
   // 4. 绘制分割线 (带透明度)
   ctx.strokeStyle = 'rgba(209, 213, 219, 0.6)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(splitLineX, textAreaY + padding);
-  ctx.lineTo(splitLineX, textAreaY + textAreaH - padding);
+  ctx.lineTo(splitLineX, textAreaY + bottomB - padding);
   ctx.stroke();
 
   // 5. 绘制设备 (右侧)
@@ -786,7 +832,7 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB) {
   ctx.font = `600 ${infoFont}px 'Noto Sans SC', sans-serif`;
   ctx.textAlign = 'right';
   let devText = truncateText(ctx, device, rightX - splitLineX - padding);
-  ctx.fillText('📱 ' + devText, rightX, textAreaY + padding * 0.8);
+  ctx.fillText('[设备] ' + devText, rightX, textAreaY + padding * 0.8);
 
   // 6. 绘制经纬度 (右侧)
   ctx.fillStyle = '#6b7280';
@@ -794,7 +840,7 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB) {
   let coordText = '';
   if(lat && lng) coordText = `${formatCoord(lat, 'N')} ${formatCoord(lng, 'E')}`;
   if(coordText) {
-    ctx.fillText('🌐 ' + coordText, rightX, textAreaY + padding * 0.8 + timeFont * 1.4);
+    ctx.fillText('[坐标] ' + coordText, rightX, textAreaY + padding * 0.8 + timeFont * 1.4);
   }
 }
 
@@ -860,8 +906,6 @@ function showToast(msg, type){
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), 2500);
 }
-
-const debouncedDrawResult = debounce(drawResult, 300);
 
 window.addEventListener('load', init);
 document.addEventListener('touchmove', e => {

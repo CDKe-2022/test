@@ -127,29 +127,37 @@ body{
   font-family:inherit;cursor:pointer;margin-top:8px;
 }
 
-#editorView{background:var(--bg);z-index:2}
-.editor-header{
-  background:var(--surface);padding:calc(12px + var(--safe-top)) 16px 12px;
-  display:flex;align-items:center;justify-content:space-between;
-  border-bottom:1px solid var(--border);box-shadow:var(--shadow);
+#editorView{display:flex;flex-direction:column}
+.preview-area{
+  flex:0 0 auto;
+  max-height:45vh;
+  overflow:hidden;
+  padding:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--surface-3);
 }
-.editor-header h2{font-size:17px;font-weight:600}
-.header-btn{padding:8px 16px;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.15s;}
-.header-btn.back{background:transparent;color:var(--muted-hi)}
-.header-btn.back:active{color:var(--fg)}
-.header-btn.save{background:var(--accent);color:#fff}
-.header-btn.save:active{background:var(--accent-dark)}
-.header-btn.save:disabled{opacity:0.5}
-
-.preview-area{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;align-items:center;gap:16px;}
-.preview-frame{background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--shadow-md);max-width:100%;position:relative;}
-.preview-frame canvas{display:block;max-width:100%;height:auto}
+.preview-frame{
+  max-height:100%;
+  display:flex;
+  align-items:center;
+}
+.preview-frame canvas{
+  max-height:100%;
+  width:auto;
+  box-shadow:var(--shadow-md);
+  border-radius:8px;
+}
 
 .edit-sheet{
-  background:var(--surface);border-radius:16px 16px 0 0;
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  max-height:none;
+  border-radius:16px 16px 0 0;
   box-shadow:0 -4px 20px rgba(0,0,0,0.08);
   padding:16px 16px calc(20px + var(--safe-bottom));
-  max-height:65vh;overflow-y:auto;
 }
 .sheet-handle{width:36px;height:4px;background:var(--border-hi);border-radius:2px;margin:0 auto 16px;}
 .sheet-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
@@ -270,7 +278,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
       <div class="icon-circle">
         <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       </div>
-      <span>上传</span>
+      <span>原生相机</span>
     </div>
   </div>
 </div>
@@ -317,13 +325,16 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
         </button>
       </div>
       <textarea id="inputLocation" placeholder="请输入详细地址（如：四川省自贡市自流井区自由路123号XX公司）" rows="2"></textarea>
+      <div id="locError" style="color: var(--danger); font-size: 11px; margin-top: 4px; display: none;">
+        *自动获取地址失败，请手动输入
+      </div>
     </div>
 
     <div class="field">
       <div class="field-label"><span>经纬度</span></div>
       <div class="field-grid-2">
-        <input type="text" id="inputLat" placeholder="纬度">
-        <input type="text" id="inputLng" placeholder="经度">
+        <input type="text" id="inputLat" inputmode="decimal" placeholder="纬度">
+        <input type="text" id="inputLng" inputmode="decimal" placeholder="经度">
       </div>
     </div>
 
@@ -375,6 +386,20 @@ const deviceModels = {
   vivo: ['vivo X100','vivo X90'],
   oppo: ['OPPO Find X7','OPPO Find X6'],
 };
+
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+function haptic(style = 'light') {
+  if (navigator.vibrate) {
+    navigator.vibrate(style === 'heavy' ? 20 : 10);
+  }
+}
 
 function init(){
   detectDevice();
@@ -438,6 +463,7 @@ function renderDevicePicker(){
 
   picker.querySelectorAll('.device-chip').forEach(chip => {
     chip.addEventListener('click', () => {
+      haptic('light');
       picker.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       state.currentDeviceChip = chip.dataset.device;
@@ -449,6 +475,7 @@ function renderDevicePicker(){
   const typePicker = document.getElementById('typePicker');
   typePicker.querySelectorAll('.device-chip').forEach(chip => {
     chip.addEventListener('click', () => {
+      haptic('light');
       typePicker.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       state.currentTypeChip = chip.dataset.type;
@@ -464,8 +491,8 @@ function renderDevicePicker(){
 
 function bindEvents(){
   document.getElementById('enableCameraBtn').addEventListener('click', startCamera);
-  document.getElementById('shutterBtn').addEventListener('click', capture);
-  document.getElementById('switchCameraBtn').addEventListener('click', switchCamera);
+  document.getElementById('shutterBtn').addEventListener('click', () => { haptic('heavy'); capture(); });
+  document.getElementById('switchCameraBtn').addEventListener('click', () => { haptic('light'); switchCamera(); });
   document.getElementById('gridBtn').addEventListener('click', () => {
     const g = document.getElementById('gridOverlay');
     g.style.display = g.style.display === 'none' ? 'block' : 'none';
@@ -485,7 +512,7 @@ function bindEvents(){
   document.getElementById('editorSaveBtn').addEventListener('click', saveImage);
 
   ['inputTime','inputType','inputLocation','inputLat','inputLng','inputDevice','inputNote'].forEach(id => {
-    document.getElementById(id).addEventListener('input', drawResult);
+    document.getElementById(id).addEventListener('input', debouncedDrawResult);
   });
 
   document.getElementById('refreshLocBtn').addEventListener('click', requestLocation);
@@ -570,12 +597,17 @@ function requestLocation(){
   const locEl = document.getElementById('topLoc');
   const locText = document.getElementById('locText');
   const locDot = document.getElementById('locDot');
+  const locError = document.getElementById('locError');
 
-  if(!navigator.geolocation){ locText.textContent = '不支持定位'; return; }
+  if(!navigator.geolocation){ 
+    locText.textContent = '不支持定位';
+    return; 
+  }
 
   locText.textContent = '正在定位...';
   locDot.classList.remove('fixed');
   locEl.classList.add('waiting');
+  locError.style.display = 'none';
 
   navigator.geolocation.getCurrentPosition(
     pos => {
@@ -596,6 +628,7 @@ function requestLocation(){
     err => {
       locText.textContent = '定位失败，请手动输入';
       locEl.classList.add('waiting');
+      locError.style.display = 'block';
       showToast('定位失败，可在编辑页手动输入', 'error');
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -623,7 +656,10 @@ async function reverseGeocode(lat, lng){
       document.getElementById('locText').textContent = address;
       if(state.capturedImage) drawResult();
     }
-  } catch(err) { console.warn('逆地理编码失败', err); }
+  } catch(err) { 
+    console.warn('逆地理编码失败', err);
+    document.getElementById('locError').style.display = 'block';
+  }
 }
 
 function enterEditor(){
@@ -669,11 +705,16 @@ function drawResult(){
   const W = img.naturalWidth;
   const H = img.naturalHeight;
 
-  const baseSize = Math.min(W, H);
-  const sideBorder = Math.max(baseSize * 0.035, 20); 
-  const topBorder = Math.max(baseSize * 0.035, 20);  
-  // 2. 加宽下方白边 (从 0.25 提升到 0.32)
-  const bottomBorder = Math.max(baseSize * 0.32, 200); 
+  const ratio = W / H;
+  let bottomBorder;
+  if (ratio < 0.8) { // 竖图
+    bottomBorder = Math.max(H * 0.18, 120); 
+  } else { // 横图或方图
+    bottomBorder = Math.max(H * 0.25, 150);
+  }
+
+  const sideBorder = Math.max(Math.min(W, H) * 0.03, 16); 
+  const topBorder = sideBorder;
 
   canvas.width = W + sideBorder * 2;
   canvas.height = H + topBorder + bottomBorder;
@@ -696,63 +737,64 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB) {
 
   const padding = sideB * 0.8;
   const textAreaY = topB + imgH;
-  const textAreaH = bottomBorder;
+  const textAreaH = bottomB;
 
-  const baseFont = Math.max(imgW * 0.022, 12);
-  const timeFont = baseFont * 1.5;
-  const infoFont = baseFont * 1.0;
-  const smallFont = baseFont * 0.85;
+  const baseFont = Math.max(imgW * 0.024, 14);
+  const timeFont = baseFont * 1.6;
+  const infoFont = baseFont * 1.1;
+  const smallFont = baseFont * 0.9;
+  const iconFont = baseFont * 1.2;
 
   const leftX = sideB + padding;
   const rightX = sideB + imgW - padding;
   const splitLineX = sideB + imgW * 0.62;
 
-  // 左侧第一行：时间
-  ctx.fillStyle = '#000000';
+  // 1. 绘制时间 (左侧)
+  ctx.fillStyle = '#111827';
   ctx.font = `700 ${timeFont}px 'JetBrains Mono', monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText(time, leftX, textAreaY + padding * 0.8);
+  ctx.fillText('⏱', leftX, textAreaY + padding * 0.8); 
+  ctx.fillText(time, leftX + iconFont * 1.2, textAreaY + padding * 0.8);
 
-  // 左侧第二行：详细地址
+  // 2. 绘制地址 (左侧)
   ctx.fillStyle = '#374151';
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
-  let maxLeftW = splitLineX - leftX - padding;
+  let maxLeftW = splitLineX - leftX - padding - iconFont * 1.2;
   let locText = truncateText(ctx, location, maxLeftW);
-  ctx.fillText(locText, leftX, textAreaY + padding * 0.8 + timeFont * 1.5);
+  ctx.fillText('📍', leftX, textAreaY + padding * 0.8 + timeFont * 1.4);
+  ctx.fillText(locText, leftX + iconFont * 1.2, textAreaY + padding * 0.8 + timeFont * 1.4);
 
-  // 左侧第三行：照片类型 + 备注
+  // 3. 绘制类型/备注 (左侧)
   ctx.fillStyle = '#6b7280';
   ctx.font = `400 ${infoFont}px 'Noto Sans SC', sans-serif`;
-  let typeText = type;
-  if(note) typeText += `  ${note}`;
+  let typeText = type + (note ? ` · ${note}` : '');
   typeText = truncateText(ctx, typeText, maxLeftW);
-  ctx.fillText(typeText, leftX, textAreaY + padding * 0.8 + timeFont * 1.5 + infoFont * 1.8);
+  ctx.fillText('📝', leftX, textAreaY + padding * 0.8 + timeFont * 1.4 + infoFont * 1.6);
+  ctx.fillText(typeText, leftX + iconFont * 1.2, textAreaY + padding * 0.8 + timeFont * 1.4 + infoFont * 1.6);
 
-  // 中间分割线
-  ctx.strokeStyle = '#d1d5db';
+  // 4. 绘制分割线 (带透明度)
+  ctx.strokeStyle = 'rgba(209, 213, 219, 0.6)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(splitLineX, textAreaY + padding);
   ctx.lineTo(splitLineX, textAreaY + textAreaH - padding);
   ctx.stroke();
 
-  // 右侧第一行：设备
+  // 5. 绘制设备 (右侧)
   ctx.fillStyle = '#374151';
   ctx.font = `600 ${infoFont}px 'Noto Sans SC', sans-serif`;
   ctx.textAlign = 'right';
   let devText = truncateText(ctx, device, rightX - splitLineX - padding);
-  ctx.fillText(devText, rightX, textAreaY + padding * 0.8);
+  ctx.fillText('📱 ' + devText, rightX, textAreaY + padding * 0.8);
 
-  // 右侧第二行：经纬度
+  // 6. 绘制经纬度 (右侧)
   ctx.fillStyle = '#6b7280';
   ctx.font = `400 ${smallFont}px 'JetBrains Mono', monospace`;
   let coordText = '';
-  if(lat && lng) {
-    coordText = `${formatCoord(lat, 'N')} ${formatCoord(lng, 'E')}`;
-  }
+  if(lat && lng) coordText = `${formatCoord(lat, 'N')} ${formatCoord(lng, 'E')}`;
   if(coordText) {
-    ctx.fillText(coordText, rightX, textAreaY + padding * 0.8 + timeFont * 1.5);
+    ctx.fillText('🌐 ' + coordText, rightX, textAreaY + padding * 0.8 + timeFont * 1.4);
   }
 }
 
@@ -818,6 +860,8 @@ function showToast(msg, type){
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+const debouncedDrawResult = debounce(drawResult, 300);
 
 window.addEventListener('load', init);
 document.addEventListener('touchmove', e => {

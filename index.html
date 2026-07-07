@@ -46,7 +46,6 @@ body{
 .view{position:fixed;inset:0;display:none;flex-direction:column}
 .view.active{display:flex}
 
-/* 相机视图 */
 #cameraView{background:#000;z-index:1}
 #cameraView .preview-container{
   flex:1;position:relative;overflow:hidden;
@@ -67,7 +66,8 @@ body{
   position:absolute;top:0;left:0;right:0;
   padding:calc(12px + var(--safe-top)) 16px 12px;
   background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);
-  display:flex;justify-content:space-between;align-items:center;z-index:10;
+  display:flex;justify-content:space-between;align-items:center;
+  z-index:10;
 }
 .top-info{display:flex;flex-direction:column;gap:2px}
 .top-time{color:#fff;font-size:15px;font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:0.02em}
@@ -127,7 +127,6 @@ body{
   font-family:inherit;cursor:pointer;margin-top:8px;
 }
 
-/* 编辑视图 */
 #editorView{background:var(--bg);z-index:2}
 .editor-header{
   background:var(--surface);padding:calc(12px + var(--safe-top)) 16px 12px;
@@ -311,13 +310,13 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 
     <div class="field">
       <div class="field-label">
-        <span>拍摄地点</span>
+        <span>详细地址</span>
         <button class="btn-inline" id="refreshLocBtn" style="font-size:11px;padding:4px 10px;">
           <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.23"/><path d="M21 3v6h-6"/></svg>
           重新定位
         </button>
       </div>
-      <input type="text" id="inputLocation" placeholder="请输入详细地点">
+      <textarea id="inputLocation" placeholder="请输入详细地址（如：四川省自贡市自流井区自由路123号XX公司）" rows="2"></textarea>
     </div>
 
     <div class="field">
@@ -387,12 +386,11 @@ function init(){
 
 function detectDevice(){
   const ua = navigator.userAgent;
-  let brand = 'apple'; // 默认认为是 apple
-  let model = 'iPhone 13 Pro'; // 默认填 iPhone 13 Pro
+  let brand = 'apple';
+  let model = 'iPhone 13 Pro';
 
   if(/iPhone|iPad|iPod/i.test(ua)){
     brand = 'apple';
-    // 尝试通过屏幕分辨率推断，如果推断不出就保持 iPhone 13 Pro
     const w = screen.width * (window.devicePixelRatio || 1);
     const h = screen.height * (window.devicePixelRatio || 1);
     const res = `${Math.max(w,h)}x${Math.min(w,h)}`;
@@ -401,7 +399,7 @@ function detectDevice(){
       '2778x1284':'iPhone 14 Pro Max', 
       '2532x1170':'iPhone 15 Pro', 
       '2532x1170':'iPhone 14 Pro', 
-      '1170x2532':'iPhone 13 Pro' // 简单兼容
+      '1170x2532':'iPhone 13 Pro'
     };
     if(appleMap[res]) model = appleMap[res];
   } else if(/Android/i.test(ua)){
@@ -409,7 +407,6 @@ function detectDevice(){
     else if(/Xiaomi|Redmi/i.test(ua)) brand = 'xiaomi';
     else if(/vivo/i.test(ua)) brand = 'vivo';
     else if(/OPPO|oppo/i.test(ua)) brand = 'oppo';
-    // 尝试提取型号
     const m = ua.match(/;\s*([a-zA-Z0-9\-_]+)\s*Build/);
     if(m) model = m[1];
   }
@@ -431,7 +428,6 @@ function renderDevicePicker(){
     state.currentDeviceChip = state.device.model;
     document.getElementById('inputDevice').value = state.device.model;
   } else {
-    // 如果没有匹配的芯片，默认选中第一个 (iPhone 13 Pro)
     const firstChip = picker.querySelector('.device-chip');
     if(firstChip){
       firstChip.classList.add('active');
@@ -450,7 +446,6 @@ function renderDevicePicker(){
     });
   });
 
-  // 照片类型选择器
   const typePicker = document.getElementById('typePicker');
   typePicker.querySelectorAll('.device-chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -612,14 +607,13 @@ async function reverseGeocode(lat, lng){
     const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=zh`);
     const data = await res.json();
     if(data){
-      // 拼接尽可能详细的地址
       const parts = [
-        data.principalSubdivision, // 省
-        data.city,                 // 市
-        data.locality,             // 区/县
-        data.thoroughfare,         // 街道/道路
-        data.subThoroughfare,      // 门牌号
-        data.premise               // 建筑物/小区
+        data.principalSubdivision,
+        data.city,
+        data.locality,
+        data.thoroughfare,
+        data.subThoroughfare,
+        data.premise
       ].filter(Boolean);
       
       const address = parts.join('·') || '未知地点';
@@ -678,8 +672,8 @@ function drawResult(){
   const baseSize = Math.min(W, H);
   const sideBorder = Math.max(baseSize * 0.035, 20); 
   const topBorder = Math.max(baseSize * 0.035, 20);  
-  // 1. 加粗下方白条 (从 0.18 提升到 0.25)
-  const bottomBorder = Math.max(baseSize * 0.25, 150); 
+  // 2. 加宽下方白边 (从 0.25 提升到 0.32)
+  const bottomBorder = Math.max(baseSize * 0.32, 200); 
 
   canvas.width = W + sideBorder * 2;
   canvas.height = H + topBorder + bottomBorder;
@@ -702,7 +696,7 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB) {
 
   const padding = sideB * 0.8;
   const textAreaY = topB + imgH;
-  const textAreaH = bottomB;
+  const textAreaH = bottomBorder;
 
   const baseFont = Math.max(imgW * 0.022, 12);
   const timeFont = baseFont * 1.5;
@@ -720,14 +714,14 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB) {
   ctx.textBaseline = 'top';
   ctx.fillText(time, leftX, textAreaY + padding * 0.8);
 
-  // 左侧第二行：地点
+  // 左侧第二行：详细地址
   ctx.fillStyle = '#374151';
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
   let maxLeftW = splitLineX - leftX - padding;
   let locText = truncateText(ctx, location, maxLeftW);
   ctx.fillText(locText, leftX, textAreaY + padding * 0.8 + timeFont * 1.5);
 
-  // 4. 新增左侧第三行：照片类型 + 备注
+  // 左侧第三行：照片类型 + 备注
   ctx.fillStyle = '#6b7280';
   ctx.font = `400 ${infoFont}px 'Noto Sans SC', sans-serif`;
   let typeText = type;

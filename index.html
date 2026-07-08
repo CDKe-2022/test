@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F7F7F9">
-<title>工作水印相机 v1.1 (修复版)</title>
+<title>工作水印相机 v2.1 (智能定位)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -121,39 +121,26 @@ body {
   font-family:inherit; cursor:pointer; margin-top:8px;
 }
 
-/* ================= 编辑页 (修复版) ================= */
-/* 修改 #editorView：强制使用动态视口高度(dvh)，并开启 Flex 布局 */
+/* ================= 编辑页 ================= */
 #editorView {
   background: var(--bg-app);
-  /* 使用 100dvh 代替 100%，确保在移动端地址栏伸缩时高度正确 */
   height: 100dvh; 
   width: 100%;
-  overflow: hidden; /* 防止整体页面滚动，只允许内容区域滚动 */
+  overflow: hidden;
   position: relative;
-  display: flex; /* 启用 Flex */
-  flex-direction: column; /* 垂直排列 */
+  display: flex; flex-direction: column;
 }
 
-/* 确保 header 在 flex 流中或者 fixed 定位不影响高度计算 */
 .global-header {
-  /* 这里保持 fixed 定位是为了毛玻璃效果，但因为它脱离了文档流，
-     所以 scroll-content 的 padding-top 是必须的 */
-  position: fixed; 
-  /* ... 其他样式保持不变 ... */
+  position: fixed; top: 0; left: 0; right: 0;
   height: calc(var(--header-h) + var(--safe-top));
   padding-top: var(--safe-top);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-left: 16px;
-  padding-right: 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  padding-left: 16px; padding-right: 16px;
   background: rgba(247, 247, 249, 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border-bottom: 0.5px solid var(--border-light);
   z-index: 100;
-  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
-  left: 0; right: 0; top: 0; /* 确保 fixed 覆盖全宽 */
 }
 
 .header-btn {
@@ -163,13 +150,10 @@ body {
 }
 .header-btn:active { opacity: 0.5; }
 
-/* 修改 .scroll-content：明确继承父级高度 */
 .scroll-content {
-  /* 强制占满父级（#editorView）的高度 */
   height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  /* 顶部内边距留出 Header 的空间 */
   padding-top: calc(var(--header-h) + var(--safe-top) + 10px);
   padding-bottom: calc(40px + var(--safe-bottom));
   width: 100%;
@@ -177,7 +161,6 @@ body {
   margin: 0 auto;
   box-sizing: border-box;
   padding-left: 20px; padding-right: 20px;
-  /* 优化：添加最小高度，防止内容极少时无法撑开 */
   min-height: 0;
 }
 .scroll-content::-webkit-scrollbar { display: none; }
@@ -192,7 +175,6 @@ body {
   border: 1px solid var(--border-light);
   transition: all 0.4s cubic-bezier(.4,0,.2,1);
   transform-origin: top center;
-  /* 修复：确保容器有最小高度，防止Canvas为0 */
   min-height: 0; 
 }
 
@@ -207,10 +189,9 @@ body {
   overflow: hidden;
   background: #eee;
   position: relative;
-  /* 修复：设置最小高度和宽度确保Canvas渲染 */
   min-width: 200px;
   min-height: 200px;
-  display: block; /* 修复：使用block防止flex压缩 */
+  display: block;
 }
 
 .preview-frame canvas {
@@ -293,6 +274,32 @@ input::placeholder, textarea::placeholder { color: #C7C7CC; }
 }
 
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* 附近地点推荐样式 */
+#nearbyPOIContainer { margin-top: 8px; }
+#nearbyPOIContainer .header-text { font-size: 12px; color: var(--text-sub); margin-bottom: 6px; padding-left: 4px; }
+.poi-item {
+  background: var(--bg-app);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.poi-item:active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.poi-item .poi-distance {
+  font-size: 11px;
+  color: var(--text-sub);
+}
 
 /* 浮层与Toast */
 .toast {
@@ -448,6 +455,15 @@ input::placeholder, textarea::placeholder { color: #C7C7CC; }
       <div class="field">
         <div class="field-label"><span>详细地址</span></div>
         <textarea id="inputLocation" placeholder="正在获取位置..." rows="2"></textarea>
+        
+        <!-- 附近地点推荐列表 -->
+        <div id="nearbyPOIContainer" style="display:none;">
+          <div class="header-text">附近推荐</div>
+          <div id="nearbyPOIList" style="display: flex; flex-direction: column; gap: 6px;">
+            <!-- JS 动态插入 -->
+          </div>
+        </div>
+
         <div class="loc-error" id="locError" style="display:none;">
           <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           定位失败，请手动输入
@@ -529,7 +545,8 @@ const state = {
   stream: null, facingMode: 'environment', capturedImage: null,
   geo: { lat: '', lng: '', accuracy: 0, address: '' }, locationReady: false,
   device: { brand: '', model: '' }, currentTypeChip: '现场核查',
-  lastBlob: null, isPreviewOpen: true, drawScheduled: false
+  lastBlob: null, isPreviewOpen: true, drawScheduled: false,
+  nearbyPOIs: [] // v2.1: 存储附近POI数据
 };
 
 function haptic(style = 'light') { if (navigator.vibrate) navigator.vibrate(style === 'heavy' ? 20 : 10); }
@@ -745,6 +762,7 @@ async function requestLocation(){
   );
 }
 
+// v2.1: 优化逆地理编码，解析附近POI
 async function reverseGeocode(lat, lng){
   const locText = document.getElementById('locText');
   const locEl = document.getElementById('topLoc');
@@ -757,8 +775,12 @@ async function reverseGeocode(lat, lng){
     if(data.status === '1' && data.regeocode) {
       const regeocode = data.regeocode;
       let baseAddress = regeocode.formatted_address || '未知地点';
+      
+      // v2.1: 保存附近POI列表
+      state.nearbyPOIs = (regeocode.pois && regeocode.pois.length > 0) ? regeocode.pois : [];
+
       let poiName = '';
-      if(regeocode.pois && regeocode.pois.length > 0) poiName = regeocode.pois[0].name; 
+      if(state.nearbyPOIs.length > 0) poiName = state.nearbyPOIs[0].name; 
       let finalAddress = baseAddress;
       if(poiName && !baseAddress.includes(poiName)) finalAddress = `${baseAddress} (${poiName})`; 
       state.geo.address = finalAddress;
@@ -767,6 +789,10 @@ async function reverseGeocode(lat, lng){
       locText.textContent = finalAddress;
       if(locError) locError.style.display = 'none';
       if(state.capturedImage) scheduleDraw();
+
+      // v2.1: 渲染推荐列表
+      if(state.nearbyPOIs.length > 0) renderNearbyPOIs();
+      else document.getElementById('nearbyPOIContainer').style.display = 'none';
     }
   } catch(err) { 
     if(locError) { locError.style.display = 'block'; locText.textContent = '自动获取失败'; }
@@ -777,7 +803,6 @@ function enterEditor(){
   if(state.stream) state.stream.getTracks().forEach(track => track.stop());
   state.stream = null;
 
-  // 确保 UI 展开并显示
   const previewCard = document.getElementById('previewCard');
   const toggleIcon = document.getElementById('toggleIcon');
   if(previewCard) previewCard.classList.remove('collapsed');
@@ -785,11 +810,9 @@ function enterEditor(){
   state.isPreviewOpen = true;
 
   switchView('editorView');
-  
-  // 填充数据
   const now = new Date();
   const timeInput = document.getElementById('inputTime');
-  if(timeInput) timeInput.value = formatTime(now); // 关键：填充时间
+  if(timeInput) timeInput.value = formatTime(now);
 
   if(state.geo.lat){
     document.getElementById('inputLat').value = state.geo.lat;
@@ -799,7 +822,6 @@ function enterEditor(){
   
   document.getElementById('inputDevice').value = 'iPhone 13 Pro';
   
-  // 稍微延迟绘制，确保DOM渲染完成
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
        scheduleDraw();
@@ -832,6 +854,36 @@ function switchView(viewId){
       if(video.srcObject !== state.stream) video.srcObject = state.stream;
     }
   }
+}
+
+// ================= 绘图核心逻辑 (v2.1) =================
+
+// 辅助：多行文本计算
+function wrapText(ctx, text, maxWidth, maxLines = 2) {
+  const words = text.split(''); 
+  let lines = [];
+  let currentLine = words[0];
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    const width = ctx.measureText(currentLine + word).width;
+    if (width < maxWidth) {
+      currentLine += word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+      if (lines.length >= maxLines) {
+        let lastLine = lines[lines.length - 1];
+        while (ctx.measureText(lastLine + '...').width > maxWidth && lastLine.length > 0) {
+          lastLine = lastLine.slice(0, -1);
+        }
+        lines[lines.length - 1] = lastLine + '...';
+        return lines;
+      }
+    }
+  }
+  lines.push(currentLine);
+  return lines;
 }
 
 function drawClockIcon(ctx, x, y, size, color) {
@@ -871,45 +923,26 @@ function drawResult(){
   const smallFont = baseFont * 0.9; 
   const iconSize = baseFont * 0.8;
 
-  // ==========================================
-  // 核心修改：动态计算底部高度
-  // ==========================================
-  
-  // 1. 临时设置字体以便测量文字宽度
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
-  
-  // 估算文本区域的可用最大宽度 (模拟 drawWatermarkText 中的逻辑)
   const maxIconWidth = Math.ceil(iconSize * 1.2); 
   const textX = sideBorder + padding + maxIconWidth + (padding * 0.5);
   const rightX = sideBorder + W - padding;
   const maxTextWidth = rightX - textX;
 
-  // 2. 获取地址文本并计算行数
   const location = document.getElementById('inputLocation').value || '未填写地点';
-  const addressLines = wrapText(ctx, location, maxTextWidth, 2); // 调用辅助函数，最多2行
+  const addressLines = wrapText(ctx, location, maxTextWidth, 2);
   
-  // 3. 计算各部分的高度
   const lineHeight = 1.8;
-  
-  const heightTime = timeFont * lineHeight;             // 时间行高度
-  const heightAddress = infoFont * lineHeight * addressLines.length; // 地址高度（动态）
-  const heightType = smallFont * lineHeight;            // 类型行高度
-  const heightBottomInfo = smallFont;                   // 底部设备/坐标行高度（大致）
-  
-  // 分割线及上下间距
+  const heightTime = timeFont * lineHeight;
+  const heightAddress = infoFont * lineHeight * addressLines.length;
+  const heightType = smallFont * lineHeight;
+  const heightBottomInfo = smallFont;
   const spacingDivider = 20 + 25; 
   const totalPadding = padding * 2;
-
-  // 4. 累加得到所需的总文本高度
   const requiredTextHeight = totalPadding + heightTime + heightAddress + heightType + spacingDivider + heightBottomInfo;
 
-  // 5. 最终决定底部区域高度
-  // 策略：取“实际所需高度”和“图片高度的12%”中的最大值（防止太挤）
-  // 限制：最大不超过图片高度的 40% (防止太长)
   let bottomBorder = Math.max(H * 0.12, requiredTextHeight);
   if (bottomBorder > H * 0.40) bottomBorder = H * 0.40;
-
-  // ==========================================
 
   canvas.width = W + sideBorder * 2;
   canvas.height = H + topBorder + bottomBorder;
@@ -921,43 +954,12 @@ function drawResult(){
   drawWatermarkText(ctx, canvas.width, canvas.height, W, H, sideBorder, topBorder, bottomBorder, timeFont, infoFont, smallFont, iconSize, padding);
 }
 
-// 辅助函数：将长文本按宽度切分为多行
-function wrapText(ctx, text, maxWidth, maxLines = 2) {
-  const words = text.split(''); // 按字符分割
-  let lines = [];
-  let currentLine = words[0];
-
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i];
-    const width = ctx.measureText(currentLine + word).width;
-    if (width < maxWidth) {
-      currentLine += word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
-      // 限制最大行数
-      if (lines.length >= maxLines) {
-        // 如果超过了最大行数，截断最后一行并加省略号
-        let lastLine = lines[lines.length - 1];
-        while (ctx.measureText(lastLine + '...').width > maxWidth && lastLine.length > 0) {
-          lastLine = lastLine.slice(0, -1);
-        }
-        lines[lines.length - 1] = lastLine + '...';
-        return lines;
-      }
-    }
-  }
-  lines.push(currentLine);
-  return lines;
-}
-
-// 2. 修改 drawWatermarkText：地址部分改为循环绘制多行
 function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFont, infoFont, smallFont, iconSize, padding) {
   const timeInput = document.getElementById('inputTime');
   const time = (timeInput && timeInput.value) ? timeInput.value : formatTime(new Date());
   
   const type = document.getElementById('inputType').value || '现场核查';
-  const location = document.getElementById('inputLocation').value || '未填写地点'; // 地址文本
+  const location = document.getElementById('inputLocation').value || '未填写地点';
   const lat = document.getElementById('inputLat').value;
   const lng = document.getElementById('inputLng').value;
   const device = document.getElementById('inputDevice').value || 'iPhone 13 Pro';
@@ -992,7 +994,7 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   const offsetX_Small = (maxIconWidth - iconSzSmall) / 2;
 
   // --- 1. 时间 ---
-  drawClockIcon(ctx, leftX + offsetX_Time, currentY + (fontSizeTime - iconSzTime)/2, iconSzTime, colorPrimary);
+  drawClockIcon(ctx, leftX + offsetX_Time, currentY + (fontSizeTime * 0.7) - (iconSzTime/2), iconSzTime, colorPrimary);
   ctx.fillStyle = colorText1;
   ctx.font = `700 ${timeFont}px 'JetBrains Mono', monospace`;
   ctx.textAlign = 'left';
@@ -1000,25 +1002,22 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   ctx.fillText(time, textX, currentY);
   currentY += fontSizeTime * lineHeight;
 
-  // --- 2. 地址 (修改点：支持自动换行) ---
-  drawLocationIcon(ctx, leftX + offsetX_Info, currentY + (fontSizeInfo - iconSzInfo)/2, iconSzInfo, colorPrimary);
+  // --- 2. 地址 ---
+  drawLocationIcon(ctx, leftX + offsetX_Info, currentY + (fontSizeInfo * 0.7) - (iconSzInfo/2), iconSzInfo, colorPrimary);
   ctx.fillStyle = colorText2;
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
   
-  // 使用 wrapText 函数处理地址，最多显示 2 行
   const addressLines = wrapText(ctx, location, maxTextWidth, 2);
-  
   addressLines.forEach((line) => {
     ctx.fillText(line, textX, currentY);
-    currentY += fontSizeInfo * lineHeight; // 每一行都下移
+    currentY += fontSizeInfo * lineHeight;
   });
 
   // --- 3. 类型 ---
-  drawTagIcon(ctx, leftX + offsetX_Small, currentY + (fontSizeSmall - iconSzSmall)/2, iconSzSmall, colorPrimary);
+  drawTagIcon(ctx, leftX + offsetX_Small, currentY + (fontSizeSmall * 0.7) - (iconSzSmall/2), iconSzSmall, colorPrimary);
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   let typeText = type + (note ? ` · ${note}` : '');
-  // 类型部分保持单行截断，因为通常较短
   ctx.fillText(truncateText(ctx, typeText, maxTextWidth), textX, currentY);
   currentY += fontSizeSmall * lineHeight;
 
@@ -1027,7 +1026,7 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   ctx.moveTo(leftX, currentY); ctx.lineTo(rightX, currentY); ctx.stroke();
   currentY += 25;
 
-  // --- 5. 底部信息 (设备 & 坐标) ---
+  // --- 5. 底部信息 ---
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   ctx.textBaseline = 'top';
@@ -1037,7 +1036,7 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   
   ctx.textAlign = 'right';
   let coordText = '';
-  if(lat && lng) coordText = `${formatCoord(lat, 'N')}${formatCoord(lng, 'E')}`;
+  if(lat && lng) coordText = `${formatCoord(lat, 'N')} ${formatCoord(lng, 'E')}`;
   if(coordText) ctx.fillText(truncateText(ctx, coordText, (rightX - leftX) / 2), rightX, currentY);
 }
 
@@ -1067,6 +1066,58 @@ function scheduleDraw() {
       state.drawScheduled = false;
     });
   }
+}
+
+// v2.1: 渲染附近地点列表
+function renderNearbyPOIs() {
+  const container = document.getElementById('nearbyPOIContainer');
+  const list = document.getElementById('nearbyPOIList');
+  list.innerHTML = ''; 
+
+  if (!state.nearbyPOIs || state.nearbyPOIs.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+
+  // 只显示前5个
+  state.nearbyPOIs.slice(0, 5).forEach((poi, index) => {
+    const btn = document.createElement('div');
+    btn.className = 'poi-item';
+    
+    const distance = poi.distance ? `${poi.distance}m` : '';
+    
+    btn.innerHTML = `
+      <span style="flex:1; padding-right:10px;">${poi.name}</span>
+      <span class="poi-distance">${distance}</span>
+    `;
+    
+    btn.addEventListener('click', () => {
+      haptic('light');
+      selectPOI(poi);
+    });
+    
+    list.appendChild(btn);
+  });
+}
+
+// v2.1: 用户选择某个地点
+function selectPOI(poi) {
+  const inputLoc = document.getElementById('inputLocation');
+  const inputLat = document.getElementById('inputLat');
+  const inputLng = document.getElementById('inputLng');
+
+  // 更新UI
+  inputLoc.value = poi.address || poi.name;
+  inputLat.value = poi.location.lat;
+  inputLng.value = poi.location.lng;
+  
+  // 视觉反馈
+  showToast(`已定位：${poi.name}`, 'success');
+  
+  // 重新绘制水印
+  scheduleDraw();
 }
 
 function triggerDownload(blob){

@@ -24,7 +24,7 @@
   --accent:#0d9488;
   --accent-hi:#14b8a6;
   --accent-dark:#0f766e;
-  --accent-soft:rgba(13,148,136,0.08); /* 修复 CSS 变量拼写错误 */
+  --accent-soft:rgba(13,148,136,0.08);
   --danger:#ef4444;
   --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
   --shadow-md:0 4px 12px rgba(0,0,0,0.08);
@@ -69,9 +69,10 @@ body{
   display:flex;justify-content:space-between;align-items:center;
   z-index:10;
 }
-.top-info{display:flex;flex-direction:column;gap:2px}
+.top-info{display:flex;flex-direction:column;gap:2px;min-width: 0;}
 .top-time{color:#fff;font-size:15px;font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:0.02em}
-.top-loc{color:rgba(255,255,255,0.8);font-size:11px;display:flex;align-items:center;gap:4px}
+.top-loc{color:rgba(255,255,255,0.8);font-size:11px;display:flex;align-items:center;gap:4px; cursor: pointer; transition: opacity 0.2s; padding: 2px 0;}
+.top-loc:active{opacity: 0.6;}
 .top-loc.waiting{color:rgba(255,255,255,0.5)}
 .loc-dot{width:6px;height:6px;border-radius:50%;background:var(--accent-hi);animation:pulse 1.5s infinite}
 .loc-dot.fixed{background:#10b981;animation:none}
@@ -129,40 +130,57 @@ body{
 
 #editorView{background:var(--bg);z-index:2}
 
-/* 恢复原有的编辑器头部样式，不额外添加背景和边框，保持原汁原味 */
 .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: calc(12px + var(--safe-top)) 16px 12px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 5;
 }
 .header-btn {
   background: none; border: none; font-family: inherit; font-size: 15px;
   color: var(--fg-2); cursor: pointer; padding: 4px 8px; display: flex; align-items: center; gap: 4px;
+  flex-shrink: 0;
 }
 .header-btn.save { color: var(--accent); font-weight: 600; }
+.header-btn.toggle { color: var(--fg-2); } /* 预览切换按钮颜色 */
 .editor-header h2 { font-size: 16px; font-weight: 600; color: var(--fg); }
 
 .preview-area{
   flex:0 0 auto;
-  max-height:45vh;
+  width: 100%;
+  height: 35vh;
   overflow:hidden;
-  padding:12px;
+  padding:0;
   display:flex;
   align-items:center;
   justify-content:center;
   background:var(--surface-3);
+  box-sizing: border-box;
+  position: relative;
+  transition: height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
+
 .preview-frame{
-  max-height:100%;
+  width: 100%;
+  height: 100%;
   display:flex;
   align-items:center;
+  justify-content:center;
+  overflow: hidden;
+  padding: 12px;
 }
 .preview-frame canvas{
   max-height:100%;
+  max-width:100%;
   width:auto;
+  height:auto;
   box-shadow:var(--shadow-md);
   border-radius:8px;
+  object-fit: contain;
 }
 
 .edit-sheet{
@@ -173,9 +191,10 @@ body{
   border-radius:16px 16px 0 0;
   box-shadow:0 -4px 20px rgba(0,0,0,0.08);
   padding:16px 16px calc(20px + var(--safe-bottom));
-  /* 恢复原样：不加背景色，保持与页面一致的灰底，或由全局控制 */
+  background: var(--surface);
+  flex-shrink: 0;
 }
-.sheet-handle{width:36px;height:4px;background:var(--border-hi);border-radius:2px;margin:0 auto 16px;}
+/* 已删除 .sheet-handle */
 .sheet-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
 .sheet-title::before{content:'';width:3px;height:16px;background:var(--accent);border-radius:2px;}
 
@@ -236,7 +255,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 @media(min-width:600px){
   #cameraView .preview-container{max-width:420px;margin:0 auto}
   .camera-bottombar{max-width:420px;margin:0 auto}
-  .camera-topbar{max-width:202px;margin:0 auto;left:50%;transform:translateX(-50%);right:auto;width:100%}
+  .camera-topbar{max-width:420px;margin:0 auto;left:50%;transform:translateX(-50%);right:auto;width:100%}
   #editorView .preview-area{max-width:480px;margin:0 auto}
   #editorView .edit-sheet{max-width:480px;margin:0 auto}
   .editor-header{max-width:480px;margin:0 auto}
@@ -255,7 +274,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
     <div class="camera-topbar">
       <div class="top-info">
         <div class="top-time" id="liveTime">--:--</div>
-        <div class="top-loc waiting" id="topLoc">
+        <div class="top-loc waiting" id="topLoc" title="点击刷新定位">
           <span class="loc-dot" id="locDot"></span>
           <span id="locText">点击开启摄像头时获取定位</span>
         </div>
@@ -302,20 +321,23 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 
 <div class="view" id="editorView">
   <div class="editor-header">
-    <!-- 修复：将错误的 class="页面-btn" 改为正确的 class="header-btn" -->
     <button class="header-btn back" id="editorBackBtn">返回</button>
     <h2>预览与编辑</h2>
+    <!-- 新的固定切换按钮 -->
+    <button class="header-btn toggle" id="previewToggleBtn" title="切换预览">
+      <svg class="icon" viewBox="0 0 24 24" id="previewToggleIcon"><polyline points="18 15 12 9 6 15"/></svg>
+    </button>
     <button class="header-btn save" id="editorSaveBtn">保存</button>
   </div>
 
-  <div class="preview-area">
+  <div class="preview-area" id="previewArea">
     <div class="preview-frame">
       <canvas id="resultCanvas"></canvas>
     </div>
   </div>
 
   <div class="edit-sheet" id="editSheet">
-    <div class="sheet-handle"></div>
+    <!-- 已删除 sheet-handle -->
     <div class="sheet-title">拍摄信息</div>
 
     <div class="field">
@@ -325,7 +347,6 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
 
     <div class="field">
       <div class="field-label"><span>照片类型</span></div>
-      <!-- 修复：添加 typePicker ID -->
       <div class="field-grid-2" id="typePicker">
         <div class="device-chip active" data-type="现场核查">现场核查</div>
         <div class="device-chip" data-type="进度汇报">进度汇报</div>
@@ -340,7 +361,7 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
         <span>详细地址</span>
         <button class="btn-inline" id="refreshLocBtn" style="font-size:11px;padding:4px 10px;">
           <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.23"/><path d="M21 3v6h-6"/></svg>
-          重新定位
+          刷新定位
         </button>
       </div>
       <textarea id="inputLocation" placeholder="请输入详细地址（如：四川省自贡市自流井区自由路123号XX公司）" rows="2"></textarea>
@@ -357,7 +378,6 @@ input[type="text"]{user-select:text;-webkit-user-select:text}
       </div>
     </div>
 
-    <!-- 修复：HTML 标签错位，恢复为正常的 field 结构，不强行添加 label 保持原样 -->
     <div class="field">
       <div class="device-picker" id="devicePicker"></div>
       <input type="text" id="inputDevice" placeholder="或手动输入设备型号" style="margin-top:8px;">
@@ -399,7 +419,7 @@ function transformLat(x, y) {
   let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
   ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
   ret += (20.0 * Math.sin(y * PI) + 40.0 * Math.sin(y / 3.0 * PI)) * 2.0 / 3.0;
-  ret += (160.0 * Math.sin(y / 12.0 * PI) + 320 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
+  ret += (160.0 * Math.sin(y / 12.0 * PI) + 320.0 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
   return ret;
 }
 
@@ -434,6 +454,7 @@ const state = {
   currentDeviceChip: '',
   currentTypeChip: '现场核查',
   lastBlob: null,
+  currentHeightVh: 35,
 };
 
 const deviceModels = {
@@ -485,7 +506,40 @@ async function init(){
   renderDevicePicker();
   bindEvents();
   startLiveTime();
+  initPreviewInteractions();
 }
+
+// ================= 简化的预览交互逻辑 =================
+function initPreviewInteractions() {
+  const toggleBtn = document.getElementById('previewToggleBtn');
+  toggleBtn.addEventListener('click', () => {
+    // 切换状态
+    if(state.currentHeightVh > 0) {
+      setPreviewHeight(0); // 当前有高度，收起
+    } else {
+      setPreviewHeight(35); // 当前没高度，展开
+    }
+    haptic();
+  });
+}
+
+function setPreviewHeight(vh) {
+  const previewArea = document.getElementById('previewArea');
+  const toggleIcon = document.getElementById('previewToggleIcon');
+
+  previewArea.style.height = vh + 'vh';
+  state.currentHeightVh = vh;
+
+  // 更新按钮图标
+  if (vh > 0) {
+    // 展开状态，显示向下箭头（点击收起）
+    toggleIcon.innerHTML = '<polyline points="6 9 12 15 18 9"/>';
+  } else {
+    // 收起状态，显示向上箭头（点击展开）
+    toggleIcon.innerHTML = '<polyline points="18 15 12 9 6 15"/>';
+  }
+}
+// =======================================================
 
 function detectDevice(){
   const ua = navigator.userAgent;
@@ -495,7 +549,6 @@ function detectDevice(){
   if(/iPhone|iPad|iPod/i.test(ua)){
     brand = 'apple';
     const w = screen.width * (window.devicePixelRatio || 1);
-    // 修复：括号未闭合且缺少数字 1
     const h = screen.height * (window.devicePixelRatio || 1);
     const res = `${Math.max(w,h)}x${Math.min(w,h)}`;
     const appleMap = { 
@@ -550,7 +603,6 @@ function renderDevicePicker(){
     });
   });
 
-  // 修复：获取正确的 typePicker
   const typePicker = document.getElementById('typePicker');
   if(typePicker) {
     typePicker.querySelectorAll('.device-chip').forEach(chip => {
@@ -579,6 +631,9 @@ function bindEvents(){
     requestLocation();   
   });
   
+  // 点击顶部定位栏刷新定位
+  document.getElementById('topLoc').addEventListener('click', requestLocation);
+
   document.getElementById('shutterBtn').addEventListener('click', () => { haptic('heavy'); capture(); });
   document.getElementById('switchCameraBtn').addEventListener('click', () => { haptic('light'); switchCamera(); });
   document.getElementById('gridBtn').addEventListener('click', () => {
@@ -593,8 +648,7 @@ function bindEvents(){
   document.getElementById('cameraInput').addEventListener('change', e => { if(e.target.files[0]) loadFromFile(e.target.files[0]); });
 
   document.getElementById('editorBackBtn').addEventListener('click', () => {
-    if(state.stream) switchView('cameraView');
-    else window.history.back();
+    switchView('cameraView');
   });
   
   document.getElementById('editorSaveBtn').addEventListener('click', saveImage);
@@ -695,7 +749,10 @@ async function requestLocation(){
   locText.textContent = '正在定位...';
   locDot.classList.remove('fixed');
   locEl.classList.add('waiting');
-  locError.style.display = 'none';
+  locDot.style.background = 'var(--accent-hi)';
+  if(document.getElementById('locError')) {
+    document.getElementById('locError').style.display = 'none';
+  }
 
   if (navigator.permissions && navigator.permissions.query) {
     try {
@@ -703,8 +760,11 @@ async function requestLocation(){
       if (status.state === 'denied') {
         locText.textContent = '定位权限被拒绝';
         locEl.classList.remove('waiting');
-        locError.style.display = 'block';
-        locError.textContent = '*定位权限被拒绝，请在设置中开启';
+        if(document.getElementById('locError')) {
+          const err = document.getElementById('locError');
+          err.style.display = 'block';
+          err.textContent = `*定位权限被拒绝，请在系统设置中开启`;
+        }
         showToast('定位权限被拒绝，请在系统设置中开启', 'error');
         return;
       }
@@ -715,11 +775,9 @@ async function requestLocation(){
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      // 获取原始 WGS84 坐标
       const wgsLat = pos.coords.latitude;
       const wgsLng = pos.coords.longitude;
       
-      // 转换为高德使用的 GCJ02 坐标
       const gcj02 = wgs84ToGcj02(wgsLng, wgsLat);
       
       state.geo.lat = gcj02.lat.toFixed(6);
@@ -734,15 +792,17 @@ async function requestLocation(){
       document.getElementById('inputLat').value = state.geo.lat;
       document.getElementById('inputLng').value = state.geo.lng;
 
-      // 使用转换后的坐标进行逆地理编码
       reverseGeocode(state.geo.lat, state.geo.lng);
     },
     err => {
-      locText.textContent = '定位失败，请手动输入';
+      locText.textContent = '定位失败';
       locEl.classList.add('waiting');
-      locError.style.display = 'block';
-      locError.textContent = '*自动获取地址失败，请手动输入';
-      showToast('定位失败，可在编辑页手动输入', 'error');
+      if(document.getElementById('locError')) {
+        const errEl = document.getElementById('locError');
+        errEl.style.display = 'block';
+        errEl.textContent = `*自动获取地址失败`;
+      }
+      showToast('定位失败，请检查网络或权限', 'error');
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
@@ -773,20 +833,29 @@ async function reverseGeocode(lat, lng){
       inputLoc.value = finalAddress;
       locEl.classList.remove('waiting');
       locText.textContent = finalAddress;
-      locError.style.display = 'none';
+      if(locError) locError.style.display = 'none';
       if(state.capturedImage) drawResult();
     } else {
       throw new Error(data.info || '高德解析失败');
     }
   } catch(err) { 
     console.error('逆地理编码失败:', err); 
-    locError.style.display = 'block';
-    locText.textContent = '自动获取失败';
+    if(locError) {
+      locError.style.display = 'block';
+      locText.textContent = '自动获取失败';
+    }
     showToast('地址解析失败，请手动输入', 'error');
   }
 }
 
 function enterEditor(){
+  if(state.stream) {
+    state.stream.getTracks().forEach(track => track.stop());
+    state.stream = null;
+  }
+
+  setPreviewHeight(35); // 默认展开
+
   switchView('editorView');
   const now = new Date();
   document.getElementById('inputTime').value = formatTime(now);
@@ -814,14 +883,17 @@ function formatTime(date){
 function switchView(viewId){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(viewId).classList.add('active');
-  if(viewId === 'cameraView' && state.stream){
-    const video = document.getElementById('cameraVideo');
-    if(video.srcObject !== state.stream) video.srcObject = state.stream;
+  
+  if(viewId === 'cameraView') {
+    if(!state.stream) {
+      startCamera();
+    } else {
+      const video = document.getElementById('cameraVideo');
+      if(video.srcObject !== state.stream) video.srcObject = state.stream;
+    }
   }
 }
 
-// ================= 新增：精细的 Canvas 矢量图标绘制 =================
-// 时钟图标 (时间)
 function drawClockIcon(ctx, x, y, size, color) {
   ctx.strokeStyle = color;
   ctx.lineWidth = size * 0.12;
@@ -837,7 +909,6 @@ function drawClockIcon(ctx, x, y, size, color) {
   ctx.stroke();
 }
 
-// 圆下面一竖线图标 (地点)
 function drawLocationIcon(ctx, x, y, size, color) {
   ctx.strokeStyle = color;
   ctx.lineWidth = size * 0.12;
@@ -852,7 +923,6 @@ function drawLocationIcon(ctx, x, y, size, color) {
   ctx.stroke();
 }
 
-// 标签角标 (类型)
 function drawTagIcon(ctx, x, y, size, color) {
   ctx.strokeStyle = color;
   ctx.lineWidth = size * 0.12;
@@ -867,7 +937,6 @@ function drawTagIcon(ctx, x, y, size, color) {
   ctx.closePath();
   ctx.stroke();
 }
-// ==================================================================
 
 function drawResult(){
   if(!state.capturedImage) return;
@@ -888,7 +957,7 @@ function drawResult(){
   const smallFont = baseFont * 0.9; 
   const iconSize = baseFont * 0.8;
 
-  const lineHeight = 1.6;
+  const lineHeight = 1.8;
   const textHeight = padding * 2 + (timeFont * lineHeight) + (infoFont * lineHeight) + (smallFont * lineHeight) + (smallFont * lineHeight) + 20;
   
   let bottomBorder = Math.max(H * 0.2, textHeight);
@@ -916,9 +985,8 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   const textAreaY = topB + imgH;
   const leftX = sideB + padding;
   const rightX = sideB + imgW - padding;
-  const maxTextWidth = rightX - leftX - iconSize - padding * 0.5;
 
-  const lineHeight = 1.6;
+  const lineHeight = 1.8;
   let currentY = textAreaY + padding;
 
   const colorPrimary = '#2563EB'; 
@@ -927,54 +995,61 @@ function drawWatermarkText(ctx, cW, cH, imgW, imgH, sideB, topB, bottomB, timeFo
   const colorText3 = '#64748B';   
   const colorLine = '#E2E8F0';    
 
-  // 1. 绘制时间 (第一层)
-  // 修复：替换为 drawClockIcon
-  drawClockIcon(ctx, leftX, currentY + (timeFont - iconSize)/2, iconSize, colorPrimary);
+  const fontSizeTime = parseFloat(timeFont) || 18;
+  const fontSizeInfo = parseFloat(infoFont) || 14;
+  const fontSizeSmall = parseFloat(smallFont) || 12;
+  
+  const iconSzTime = Math.ceil(fontSizeTime * 1.2);
+  const iconSzInfo = Math.ceil(fontSizeInfo * 1.2);
+  const iconSzSmall = Math.ceil(fontSizeSmall * 1.2);
+
+  const maxIconWidth = Math.max(iconSzTime, iconSzInfo, iconSzSmall);
+  
+  const textX = leftX + maxIconWidth + padding * 0.5;
+  const maxTextWidth = rightX - textX;
+
+  const offsetX_Time = (maxIconWidth - iconSzTime) / 2;
+  const offsetX_Info = (maxIconWidth - iconSzInfo) / 2;
+  const offsetX_Small = (maxIconWidth - iconSzSmall) / 2;
+
+  drawClockIcon(ctx, leftX + offsetX_Time, currentY + (fontSizeTime - iconSzTime)/2, iconSzTime, colorPrimary);
   ctx.fillStyle = colorText1;
   ctx.font = `700 ${timeFont}px 'JetBrains Mono', monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  // 修复：未定义的逻辑
   const timeStr = time;
-  ctx.fillText(timeStr, leftX + iconSize + padding * 0.5, currentY);
-  currentY += timeFont * lineHeight;
+  ctx.fillText(timeStr, textX, currentY);
+  currentY += fontSizeTime * lineHeight;
 
-  // 2. 绘制地点 (第二层)
-  // 修复：替换为 drawLocationIcon
-  drawLocationIcon(ctx, leftX, currentY + (infoFont - iconSize)/2, iconSize, colorPrimary);
+  drawLocationIcon(ctx, leftX + offsetX_Info, currentY + (fontSizeInfo - iconSzInfo)/2, iconSzInfo, colorPrimary);
   ctx.fillStyle = colorText2;
   ctx.font = `500 ${infoFont}px 'Noto Sans SC', sans-serif`;
   let locText = truncateText(ctx, location, maxTextWidth);
-  ctx.fillText(locText, leftX + iconSize + padding * 0.5, currentY);
-  currentY += infoFont * lineHeight;
+  ctx.fillText(locText, textX, currentY);
+  currentY += fontSizeInfo * lineHeight;
 
-  // 3. 绘制类型与备注 (第三层)
-  // 修复：替换为 drawTagIcon
-  drawTagIcon(ctx, leftX, currentY + (smallFont - iconSize)/2, iconSize, colorPrimary);
+  drawTagIcon(ctx, leftX + offsetX_Small, currentY + (fontSizeSmall - iconSzSmall)/2, iconSzSmall, colorPrimary);
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   let typeText = type + (note ? ` · ${note}` : '');
   typeText = truncateText(ctx, typeText, maxTextWidth);
-  ctx.fillText(typeText, leftX + iconSize + padding * 0.5, currentY);
-  // 修复：照片类型没有纵向递增 currentY
-  currentY += smallFont * lineHeight;
+  ctx.fillText(typeText, textX, currentY);
+  currentY += fontSizeSmall * lineHeight;
 
-  // 4. 绘制分割线
   ctx.strokeStyle = colorLine;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(leftX, currentY);
   ctx.lineTo(rightX, currentY);
   ctx.stroke();
-  currentY += 15;
+  currentY += 25;
 
-  // 5. 绘制底部元数据 (设备 + 坐标) - 左右分布
   ctx.fillStyle = colorText3;
   ctx.font = `400 ${smallFont}px 'Noto Sans SC', sans-serif`;
   ctx.textBaseline = 'top';
   
   ctx.textAlign = 'left';
-  let devText = truncateText(ctx, device, (rightX - leftX) / 2 - iconSize - padding * 0.5);
+  let devText = truncateText(ctx, device, (rightX - leftX) / 2 - padding);
   ctx.fillText(devText, leftX, currentY);
 
   ctx.textAlign = 'right';
@@ -1037,7 +1112,6 @@ async function shareImage(blob){
 
 function fallbackSave(blob){
   const url = URL.createObjectURL(blob);
-  // 修复：兜底保存图片 ID 错误
   document.getElementById('savePreviewImg').src = url;
   document.getElementById('saveOverlay').classList.add('show');
 }
@@ -1051,10 +1125,6 @@ function showToast(msg, type){
 }
 
 window.addEventListener('load', init);
-document.addEventListener('touchmove', e => {
-  if(e.target.closest('.edit-sheet') || e.target.closest('.preview-area') || e.target.closest('.save-overlay')) return;
-  e.preventDefault();
-}, { passive: false });
 </script>
 </body>
 </html>

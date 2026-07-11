@@ -62,9 +62,38 @@
   .layout{
     display:grid; grid-template-columns:300px 1fr 300px;
     height:calc(100vh - 60px); position:relative; z-index:1;
+    transition:grid-template-columns 0.3s ease;
   }
-  aside{background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:20px}
+  .layout.left-collapsed{grid-template-columns:0 1fr 300px;}
+  .layout.right-collapsed{grid-template-columns:300px 1fr 0;}
+  .layout.both-collapsed{grid-template-columns:0 1fr 0;}
+  aside{
+    background:var(--panel); border-right:1px solid var(--border); 
+    overflow-y:auto; padding:20px; position:relative;
+    transition:width 0.3s ease, padding 0.3s ease;
+    min-width:0;
+  }
   aside.right{border-right:none; border-left:1px solid var(--border)}
+  aside.collapsed{overflow:hidden; padding:0; border:none;}
+  aside.collapsed > *{display:none;}
+
+  /* ========== Collapse Toggle Buttons ========== */
+  .sidebar-toggle{
+    position:absolute; top:80px; z-index:500;
+    width:22px; height:52px; padding:0;
+    background:var(--panel); border:1px solid var(--border);
+    color:var(--fg-muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; user-select:none; line-height:1;
+    transition:all 0.2s ease;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  }
+  .sidebar-toggle:hover{color:var(--accent); border-color:var(--accent); background:var(--accent-soft);}
+  .map-left-toggle{left:0; border-radius:0 6px 6px 0; border-left:none;}
+  .map-right-toggle{right:0; border-radius:6px 0 0 6px; border-right:none;}
+  .sidebar-toggle .arrow{display:inline-block; transition:transform 0.2s ease; font-weight:bold;}
+  .layout.left-collapsed .map-left-toggle{left:0;}
+  .layout.right-collapsed .map-right-toggle{right:0;}
 
   /* ========== Map View ========== */
   .map-view{position:relative; background:var(--bg-soft); overflow:hidden}
@@ -314,9 +343,9 @@
   </div>
 </header>
 
-<div class="layout">
+<div class="layout" id="layout">
   <!-- ========== Left Sidebar ========== -->
-  <aside class="left">
+  <aside class="left" id="leftSidebar">
     <div class="section-block">
       <div class="section-title">数据导入</div>
       <div class="upload-zone" id="uploadZone">
@@ -353,6 +382,12 @@
 
   <!-- ========== Map View ========== -->
   <div class="map-view">
+    <button class="sidebar-toggle map-left-toggle" onclick="toggleLeftSidebar()" title="收起左侧面板">
+      <span class="arrow" id="leftToggleArrow">◀</span>
+    </button>
+    <button class="sidebar-toggle map-right-toggle" onclick="toggleRightSidebar()" title="收起右侧面板">
+      <span class="arrow" id="rightToggleArrow">▶</span>
+    </button>
     <div id="map"></div>
     <div class="empty-state" id="emptyState">
       <div class="glyph">
@@ -370,7 +405,7 @@
   </div>
 
   <!-- ========== Right Sidebar ========== -->
-  <aside class="right">
+  <aside class="right" id="rightSidebar">
     <div class="section-block">
       <div class="section-title">导出设置</div>
       <div class="setting-row">
@@ -428,6 +463,54 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
+// ============ 侧边栏折叠 ============
+let leftCollapsed = false;
+let rightCollapsed = false;
+
+function toggleLeftSidebar() {
+  leftCollapsed = !leftCollapsed;
+  const layout = document.getElementById('layout');
+  const leftSidebar = document.getElementById('leftSidebar');
+  const arrow = document.getElementById('leftToggleArrow');
+  const btn = arrow.parentElement;
+  
+  if (leftCollapsed) {
+    layout.classList.add('left-collapsed');
+    leftSidebar.classList.add('collapsed');
+    arrow.textContent = '▶';
+    btn.title = '展开左侧面板';
+  } else {
+    layout.classList.remove('left-collapsed');
+    leftSidebar.classList.remove('collapsed');
+    arrow.textContent = '◀';
+    btn.title = '收起左侧面板';
+  }
+  
+  setTimeout(() => { map.invalidateSize(); }, 300);
+}
+
+function toggleRightSidebar() {
+  rightCollapsed = !rightCollapsed;
+  const layout = document.getElementById('layout');
+  const rightSidebar = document.getElementById('rightSidebar');
+  const arrow = document.getElementById('rightToggleArrow');
+  const btn = arrow.parentElement;
+  
+  if (rightCollapsed) {
+    layout.classList.add('right-collapsed');
+    rightSidebar.classList.add('collapsed');
+    arrow.textContent = '◀';
+    btn.title = '展开右侧面板';
+  } else {
+    layout.classList.remove('right-collapsed');
+    rightSidebar.classList.remove('collapsed');
+    arrow.textContent = '▶';
+    btn.title = '收起右侧面板';
+  }
+  
+  setTimeout(() => { map.invalidateSize(); }, 300);
+}
+
 // ============ 初始化 Leaflet 地图 ============
 const map = L.map('map', {
   renderer: L.svg(),
